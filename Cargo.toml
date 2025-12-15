@@ -1,0 +1,29 @@
+[package]
+name = "texty"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ropey = "1.6"
+crossterm = "0.27"
+unicode-segmentation = "1.10"
+
+# Syntax highlighting
+tree-sitter = "0.20"
+tree-sitter-rust = "0.20"
+tree-sitter-python = "0.20"
+tree-sitter-javascript = "0.20"
+tree-sitter-typescript = "0.20"
+
+# LSP
+lsp-types = "0.95"
+lsp-server = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+thiserror = "1.0"
+
+[dev-dependencies]
+proptest = "1.0"
+tempfile = "3.8"
