@@ -80,7 +80,7 @@ cargo run file1.rs file2.py
 #### Normal Mode (Default)
 | Key | Action |
 |-----|--------|
-| `h/j/k/l` | Move cursor left/down/up/right |
+| `h/j/k/l` or `←/↓/↑/→` | Move cursor left/down/up/right |
 | `i` | Enter insert mode |
 | `:` | Enter command mode |
 | `w` | Save file |
@@ -90,6 +90,7 @@ cargo run file1.rs file2.py
 | Key | Action |
 |-----|--------|
 | `Esc` | Return to normal mode |
+| `←/→/↑/↓` | Move cursor (arrow keys) |
 | `Ctrl+h` | Delete previous character |
 
 #### Command Mode

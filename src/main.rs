@@ -78,10 +78,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<Command> {
     match mode {
         Mode::Normal => match key_event.code {
+            // Vim-style movement
             KeyCode::Char('h') => Some(Command::MoveLeft),
             KeyCode::Char('j') => Some(Command::MoveDown),
             KeyCode::Char('k') => Some(Command::MoveUp),
             KeyCode::Char('l') => Some(Command::MoveRight),
+            // Arrow key movement (same as hjkl)
+            KeyCode::Left => Some(Command::MoveLeft),
+            KeyCode::Down => Some(Command::MoveDown),
+            KeyCode::Up => Some(Command::MoveUp),
+            KeyCode::Right => Some(Command::MoveRight),
             KeyCode::Char('i') => Some(Command::InsertMode),
             KeyCode::Char(':') => Some(Command::EnterCommandMode),
             KeyCode::Char('f') => Some(Command::FormatBuffer),
@@ -103,6 +109,11 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             KeyCode::Char(c) => Some(Command::InsertChar(c)),
             KeyCode::Enter => Some(Command::InsertChar('\n')),
             KeyCode::Backspace => Some(Command::DeleteChar),
+            // Arrow keys for navigation in insert mode
+            KeyCode::Left => Some(Command::MoveLeft),
+            KeyCode::Right => Some(Command::MoveRight),
+            KeyCode::Up => Some(Command::MoveUp),
+            KeyCode::Down => Some(Command::MoveDown),
             _ => None,
         },
         _ => None,

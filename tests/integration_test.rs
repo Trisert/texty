@@ -393,3 +393,36 @@ fn test_backspace_bounds_checking() {
     assert_eq!(editor.cursor.line, 0);
     assert_eq!(editor.cursor.col, 0);
 }
+
+#[test]
+fn test_arrow_key_movement() {
+    use texty::editor::Editor;
+    use texty::command::Command;
+
+    let mut editor = Editor::new();
+    editor.buffer.insert_text("Hello World", 0, 0).unwrap();
+
+    // Test arrow key movement (same as hjkl)
+    assert_eq!(editor.cursor.line, 0);
+    assert_eq!(editor.cursor.col, 0);
+
+    // Right arrow (same as l)
+    editor.execute_command(Command::MoveRight);
+    assert_eq!(editor.cursor.col, 1);
+
+    // Left arrow (same as h)
+    editor.execute_command(Command::MoveLeft);
+    assert_eq!(editor.cursor.col, 0);
+
+    // Test in insert mode
+    editor.execute_command(Command::InsertMode);
+    editor.buffer.insert_text("test", 0, 0).unwrap();
+    editor.cursor.col = 4; // Move to end of "test"
+
+    // Arrow keys should work in insert mode too
+    editor.execute_command(Command::MoveLeft);
+    assert_eq!(editor.cursor.col, 3);
+
+    editor.execute_command(Command::MoveRight);
+    assert_eq!(editor.cursor.col, 4);
+}
