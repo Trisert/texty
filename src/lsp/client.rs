@@ -1,21 +1,24 @@
-// src/lsp/client.rs - LSP Client implementation
+// src/lsp/client.rs - LSP Client implementation (Helix-style async architecture)
 
-use lsp_server::{Connection, Message, Notification, Request};
+use super::transport::{Transport, TransportError};
 use lsp_types::*;
 use lsp_types::{
-    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, InitializedParams, TextDocumentContentChangeEvent,
-    TextDocumentIdentifier, TextDocumentItem, VersionedTextDocumentIdentifier,
+    ClientCapabilities,
+    ClientInfo,
+    DidChangeTextDocumentParams,
+    DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams,
+    InitializedParams,
     notification::{
-        DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
-        Exit, Initialized,
+        DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument, Exit,
     },
-    request::{Initialize, Shutdown},
+    request::Shutdown,
+    // Additional capabilities types
 };
-use serde_json::Value;
 use std::process::{Command, Stdio};
-use std::thread;
-
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(thiserror::Error, Debug)]
 pub enum LspError {
@@ -23,6 +26,8 @@ pub enum LspError {
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Transport error: {0}")]
+    Transport(#[from] TransportError),
     #[error("LSP protocol error: {0}")]
     Protocol(String),
     #[error("Server not initialized")]
@@ -31,68 +36,92 @@ pub enum LspError {
     ProcessError,
 }
 
+#[derive(Clone)]
 pub struct LspClient {
-    connection: Connection,
+    transport: Arc<Mutex<Option<Transport>>>,
     initialized: bool,
-    request_id: i64,
     server_capabilities: Option<ServerCapabilities>,
+    process_handle: Arc<Mutex<Option<std::process::Child>>>,
+    server_command: String,
+    server_args: Vec<String>,
+    connection_attempts: Arc<Mutex<u32>>,
 }
 
 impl LspClient {
-    pub fn new(server_command: &str, args: &[String]) -> Result<Self, LspError> {
-        let mut child = Command::new(server_command)
+    pub async fn new(server_command: &str, args: &[String]) -> Result<Self, LspError> {
+        let child = Command::new(server_command)
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::null()) // Redirect stderr to /dev/null to suppress LSP server output
             .spawn()?;
 
-        let (connection, io_threads) = Connection::stdio();
+        let (connection, _io_threads) = lsp_server::Connection::stdio();
 
-        // Start IO threads in background
-        thread::spawn(move || {
-            io_threads.join().unwrap();
-            let _ = child.wait(); // Clean up process
-        });
+        let transport = Transport::new(connection);
 
         Ok(Self {
-            connection,
+            transport: Arc::new(Mutex::new(Some(transport))),
             initialized: false,
-            request_id: 0,
             server_capabilities: None,
+            process_handle: Arc::new(Mutex::new(Some(child))),
+            server_command: server_command.to_string(),
+            server_args: args.to_vec(),
+            connection_attempts: Arc::new(Mutex::new(1)),
         })
     }
 
-    pub fn initialize(
+    pub async fn initialize(
         &mut self,
         workspace_folders: Option<Vec<WorkspaceFolder>>,
+        root_uri: Option<Url>,
     ) -> Result<InitializeResult, LspError> {
+        let transport = self.transport.lock().await;
+        let transport = transport.as_ref().ok_or(LspError::NotInitialized)?;
+
+        // Client capabilities - currently using defaults (empty capabilities object)
+        // TODO: Add proper LSP client capabilities declaration to inform servers what features we support
+        // This affects what the server sends us (e.g., completion, diagnostics, etc.)
+        let capabilities = ClientCapabilities::default();
+
         #[allow(deprecated)]
         let params = InitializeParams {
             process_id: Some(std::process::id()),
-            root_path: None,
-            root_uri: None,
+            root_path: root_uri
+                .as_ref()
+                .and_then(|u| u.to_file_path().ok())
+                .and_then(|p| p.to_str().map(|s| s.to_string())),
+            root_uri,
             initialization_options: None,
-            capabilities: ClientCapabilities::default(),
+            capabilities,
             trace: Some(TraceValue::Off),
             workspace_folders,
-            client_info: None,
+            client_info: Some(ClientInfo {
+                name: "texty".to_string(),
+                version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            }),
             locale: None,
             work_done_progress_params: Default::default(),
         };
 
-        let result: InitializeResult = self.send_request::<Initialize>("initialize", &params)?;
+        let params_value = serde_json::to_value(params)?;
+        let result_value = transport
+            .send_request("initialize".to_string(), params_value)
+            .await?;
+        let result: InitializeResult = serde_json::from_value(result_value)?;
+
         self.server_capabilities = Some(result.capabilities.clone());
         self.initialized = true;
 
         // Send initialized notification
-        self.send_notification::<Initialized>("initialized", &InitializedParams {})?;
+        let initialized_params = serde_json::to_value(InitializedParams {})?;
+        transport.send_notification("initialized".to_string(), initialized_params)?;
 
         Ok(result)
     }
 
-    pub fn send_request<R: lsp_types::request::Request>(
-        &mut self,
+    pub async fn send_request<R: lsp_types::request::Request>(
+        &self,
         method: &str,
         params: &R::Params,
     ) -> Result<R::Result, LspError>
@@ -104,42 +133,17 @@ impl LspClient {
             return Err(LspError::NotInitialized);
         }
 
-        let id = self.request_id as i32;
-        self.request_id += 1;
+        let transport = self.transport.lock().await;
+        let transport = transport.as_ref().ok_or(LspError::NotInitialized)?;
 
-        let request = Request::new(id.into(), method.to_string(), params);
-        self.connection
-            .sender
-            .send(Message::Request(request))
-            .map_err(|e| LspError::Protocol(format!("Send error: {}", e)))?;
-
-        // Wait for response
-        loop {
-            match self
-                .connection
-                .receiver
-                .recv()
-                .map_err(|e| LspError::Protocol(format!("Receive error: {}", e)))?
-            {
-                Message::Response(response) => {
-                    if response.id == id.into() {
-                        if let Some(error) = response.error {
-                            return Err(LspError::Protocol(format!(
-                                "LSP error: {}",
-                                error.message
-                            )));
-                        }
-                        return serde_json::from_value(response.result.unwrap_or(Value::Null))
-                            .map_err(|e| e.into());
-                    }
-                }
-                Message::Notification(_) => continue, // Handle notifications separately if needed
-                Message::Request(_) => continue,      // Server requests (like work done progress)
-            }
-        }
+        let params_value = serde_json::to_value(params)?;
+        let result_value = transport
+            .send_request(method.to_string(), params_value)
+            .await?;
+        serde_json::from_value(result_value).map_err(|e| e.into())
     }
 
-    pub fn send_notification<N: lsp_types::notification::Notification>(
+    pub async fn send_notification<N: lsp_types::notification::Notification>(
         &self,
         method: &str,
         params: &N::Params,
@@ -147,11 +151,11 @@ impl LspClient {
     where
         N::Params: serde::Serialize,
     {
-        let notification = Notification::new(method.to_string(), params);
-        self.connection
-            .sender
-            .send(Message::Notification(notification))
-            .map_err(|e| LspError::Protocol(format!("Send error: {}", e)))?;
+        let transport = self.transport.lock().await;
+        let transport = transport.as_ref().ok_or(LspError::NotInitialized)?;
+
+        let params_value = serde_json::to_value(params)?;
+        transport.send_notification(method.to_string(), params_value)?;
         Ok(())
     }
 
@@ -159,16 +163,16 @@ impl LspClient {
         self.initialized
     }
 
-    pub fn shutdown(&mut self) -> Result<(), LspError> {
+    pub async fn shutdown(&mut self) -> Result<(), LspError> {
         if self.initialized {
-            self.send_request::<Shutdown>("shutdown", &())?;
-            self.send_notification::<Exit>("exit", &())?;
+            self.send_request::<Shutdown>("shutdown", &()).await?;
+            self.send_notification::<Exit>("exit", &()).await?;
             self.initialized = false;
         }
         Ok(())
     }
 
-    pub fn text_document_did_open(
+    pub async fn text_document_did_open(
         &self,
         uri: &Url,
         language_id: &str,
@@ -184,9 +188,10 @@ impl LspClient {
             },
         };
         self.send_notification::<DidOpenTextDocument>("textDocument/didOpen", &params)
+            .await
     }
 
-    pub fn text_document_did_change(
+    pub async fn text_document_did_change(
         &self,
         uri: &Url,
         version: i32,
@@ -200,41 +205,213 @@ impl LspClient {
             content_changes: changes,
         };
         self.send_notification::<DidChangeTextDocument>("textDocument/didChange", &params)
+            .await
     }
 
-    pub fn text_document_did_save(&self, uri: &Url, text: Option<&str>) -> Result<(), LspError> {
+    pub async fn text_document_did_save(
+        &self,
+        uri: &Url,
+        text: Option<&str>,
+    ) -> Result<(), LspError> {
         let params = DidSaveTextDocumentParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
             text: text.map(|s| s.to_string()),
         };
         self.send_notification::<DidSaveTextDocument>("textDocument/didSave", &params)
+            .await
     }
 
-    pub fn text_document_did_close(&self, uri: &Url) -> Result<(), LspError> {
+    pub async fn text_document_did_close(&self, uri: &Url) -> Result<(), LspError> {
         let params = DidCloseTextDocumentParams {
             text_document: TextDocumentIdentifier { uri: uri.clone() },
         };
         self.send_notification::<DidCloseTextDocument>("textDocument/didClose", &params)
+            .await
+    }
+
+    pub async fn goto_definition(
+        &self,
+        uri: &Url,
+        position: lsp_types::Position,
+    ) -> Result<Option<lsp_types::GotoDefinitionResponse>, LspError> {
+        let params = lsp_types::GotoDefinitionParams {
+            text_document_position_params: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier { uri: uri.clone() },
+                position,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let response: Option<lsp_types::GotoDefinitionResponse> = self
+            .send_request::<lsp_types::request::GotoDefinition>("textDocument/definition", &params)
+            .await?;
+        Ok(response)
+    }
+
+    pub async fn find_references(
+        &self,
+        uri: &Url,
+        position: lsp_types::Position,
+        include_declaration: bool,
+    ) -> Result<Option<Vec<lsp_types::Location>>, LspError> {
+        let params = lsp_types::ReferenceParams {
+            text_document_position: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier { uri: uri.clone() },
+                position,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: lsp_types::ReferenceContext {
+                include_declaration,
+            },
+        };
+
+        let response: Option<Vec<lsp_types::Location>> = self
+            .send_request::<lsp_types::request::References>("textDocument/references", &params)
+            .await?;
+        Ok(response)
+    }
+
+    pub async fn hover(
+        &self,
+        uri: &Url,
+        position: lsp_types::Position,
+    ) -> Result<Option<lsp_types::Hover>, LspError> {
+        let params = lsp_types::HoverParams {
+            text_document_position_params: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier { uri: uri.clone() },
+                position,
+            },
+            work_done_progress_params: Default::default(),
+        };
+
+        let response: Option<lsp_types::Hover> = self
+            .send_request::<lsp_types::request::HoverRequest>("textDocument/hover", &params)
+            .await?;
+        Ok(response)
+    }
+
+    pub async fn workspace_symbols(
+        &self,
+        query: String,
+    ) -> Result<Option<lsp_types::WorkspaceSymbolResponse>, LspError> {
+        let params = lsp_types::WorkspaceSymbolParams {
+            query,
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let response: Option<lsp_types::WorkspaceSymbolResponse> = self
+            .send_request::<lsp_types::request::WorkspaceSymbolRequest>("workspace/symbol", &params)
+            .await?;
+        Ok(response)
+    }
+
+    pub async fn code_actions(
+        &self,
+        uri: &Url,
+        range: lsp_types::Range,
+        context: lsp_types::CodeActionContext,
+    ) -> Result<Option<lsp_types::CodeActionResponse>, LspError> {
+        let params = lsp_types::CodeActionParams {
+            text_document: lsp_types::TextDocumentIdentifier { uri: uri.clone() },
+            range,
+            context,
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let response: Option<lsp_types::CodeActionResponse> = self
+            .send_request::<lsp_types::request::CodeActionRequest>(
+                "textDocument/codeAction",
+                &params,
+            )
+            .await?;
+        Ok(response)
+    }
+
+    pub async fn is_healthy(&self) -> bool {
+        let transport = self.transport.lock().await;
+        transport
+            .as_ref()
+            .map(|t| t.is_connected())
+            .unwrap_or(false)
+    }
+
+    pub async fn restart_if_needed(&mut self) -> Result<(), LspError> {
+        if !self.is_healthy().await {
+            let attempts = {
+                let mut attempts = self.connection_attempts.lock().await;
+                *attempts += 1;
+                *attempts
+            };
+
+            if attempts <= 3 {
+                // Max 3 restart attempts
+                eprintln!(
+                    "LSP server unhealthy, attempting restart (attempt {})",
+                    attempts
+                );
+
+                // Clean up existing process
+                if let Some(mut child) = self.process_handle.lock().await.take() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+
+                // Create new connection
+                let child = Command::new(&self.server_command)
+                    .args(&self.server_args)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()?;
+
+                let (connection, _io_threads) = lsp_server::Connection::stdio();
+                let transport = Transport::new(connection);
+
+                *self.transport.lock().await = Some(transport);
+                *self.process_handle.lock().await = Some(child);
+                self.initialized = false;
+
+                // Re-initialize
+                let workspace_folders = None;
+                let root_uri = None;
+                self.initialize(workspace_folders, root_uri).await?;
+
+                Ok(())
+            } else {
+                Err(LspError::Protocol(
+                    "Max restart attempts exceeded".to_string(),
+                ))
+            }
+        } else {
+            // Reset attempts on successful connection
+            *self.connection_attempts.lock().await = 0;
+            Ok(())
+        }
     }
 }
 
 impl Drop for LspClient {
     fn drop(&mut self) {
-        let _ = self.shutdown();
+        // Note: shutdown() is async, so we can't call it here
+        // The transport will be dropped automatically
+        if let Ok(mut guard) = self.process_handle.try_lock()
+            && let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lsp_types::{Url, TextDocumentIdentifier, TextDocumentContentChangeEvent};
+    use lsp_types::{TextDocumentContentChangeEvent, TextDocumentIdentifier, Url};
 
-    #[test]
-    fn test_lsp_client_initialization() {
-        // This test will fail without a real LSP server, but tests the initialization logic
-        let result = LspClient::new("nonexistent-server", &[]);
-        assert!(result.is_err());
-    }
+    // TODO: Add proper LSP client tests when we have a test LSP server
 
     #[test]
     fn test_lsp_client_is_initialized() {

@@ -43,9 +43,9 @@ impl Formatter {
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
-            Err(std::io::Error::other(
-                String::from_utf8_lossy(&output.stderr),
-            ))
+            Err(std::io::Error::other(String::from_utf8_lossy(
+                &output.stderr,
+            )))
         }
     }
 }

@@ -9,4 +9,5 @@ pub mod keymap;
 pub mod lsp;
 pub mod mode;
 pub mod syntax;
+pub mod ui;
 pub mod viewport;

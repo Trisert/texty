@@ -4,3 +4,5 @@ pub mod client;
 pub mod completion;
 pub mod diagnostics;
 pub mod manager;
+pub mod progress;
+pub mod transport;

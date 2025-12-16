@@ -26,8 +26,6 @@ impl CompletionManager {
         }
     }
 
-
-
     pub fn set_items(&mut self, items: Vec<lsp_types::CompletionItem>) {
         self.items = items;
         self.current_index = 0;
@@ -39,12 +37,12 @@ impl CompletionManager {
         }
     }
 
-    pub fn request_completion(
+    pub async fn request_completion(
         &mut self,
-        client: &mut LspClient,
+        client: &LspClient,
         uri: &Url,
         position: Position,
-    ) -> Result<(), LspError> {
+    ) -> Result<&[CompletionItem], LspError> {
         let params = CompletionParams {
             text_document_position: lsp_types::TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier { uri: uri.clone() },
@@ -56,14 +54,15 @@ impl CompletionManager {
         };
 
         let response: Option<CompletionResponse> = client
-            .send_request::<lsp_types::request::Completion>("textDocument/completion", &params)?;
+            .send_request::<lsp_types::request::Completion>("textDocument/completion", &params)
+            .await?;
         let response = response.ok_or(LspError::Protocol("No completion response".to_string()))?;
         self.items = match response {
             CompletionResponse::Array(items) => items,
             CompletionResponse::List(list) => list.items,
         };
         self.current_index = 0;
-        Ok(())
+        Ok(self.items.as_slice())
     }
 
     pub fn next_item(&mut self) {

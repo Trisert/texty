@@ -11,7 +11,18 @@ pub enum Command {
     SaveFile,
     FormatBuffer,
     Completion,
+    CompletionNext,
+    CompletionPrev,
+    CompletionAccept,
+    CodeActionNext,
+    CodeActionPrev,
+    CodeActionAccept,
+    EnterCommandMode,
     GotoDefinition,
+    FindReferences,
+    Hover,
+    WorkspaceSymbols,
+    CodeAction,
     Quit,
     // Add more as needed
 }
