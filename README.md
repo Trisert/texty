@@ -50,7 +50,7 @@
 ### Build from Source
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/texty.git
+git clone https://github.com/Trisert/texty.git
 cd texty
 
 # Build in release mode
@@ -256,7 +256,7 @@ We welcome contributions! Please see our [contributing guide](CONTRIBUTING.md) f
 
 ### Development Setup
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/yourusername/texty.git`
+2. Clone your fork: `git clone https://github.com/Trisert/texty.git`
 3. Create a feature branch: `git checkout -b feature-name`
 4. Make your changes and add tests
 5. Run the test suite: `cargo test`
