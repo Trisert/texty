@@ -247,13 +247,32 @@ impl Editor {
         self.buffer.file_path = Some(path.to_string());
 
         // Update language based on file extension
-        self.current_language = crate::syntax::language::get_language_config_by_extension(
+        let language_config = crate::syntax::language::get_language_config_by_extension(
             std::path::Path::new(path)
                 .extension()
                 .and_then(|s| s.to_str())
                 .unwrap_or(""),
-        )
-        .map(|config| config.id);
+        );
+
+        if let Some(config) = language_config {
+            self.current_language = Some(config.id);
+
+            // Initialize syntax highlighter for this language
+            match crate::syntax::highlighter::SyntaxHighlighter::new(config) {
+                Ok(highlighter) => {
+                    self.buffer.highlighter = Some(highlighter);
+                    // Parse the loaded content
+                    let _ = self.buffer.update_highlighter();
+                }
+                Err(_) => {
+                    // Syntax highlighting failed to initialize, continue without it
+                    self.buffer.highlighter = None;
+                }
+            }
+        } else {
+            self.current_language = None;
+            self.buffer.highlighter = None;
+        }
 
         // TODO: Notify LSP server about file open
         // Async LSP operations need proper integration with sync UI
@@ -423,11 +442,8 @@ impl Editor {
                         "on" => {
                             // Enable syntax highlighting
                             if let Some(language_id) = self.current_language {
-                                let config =
-                                    crate::syntax::language::get_language_config(language_id);
-                                if let Ok(highlighter) =
-                                    crate::syntax::highlighter::SyntaxHighlighter::new(config)
-                                {
+                                let config = crate::syntax::language::get_language_config(language_id);
+                                if let Ok(highlighter) = crate::syntax::highlighter::SyntaxHighlighter::new(config) {
                                     self.buffer.highlighter = Some(highlighter);
                                 }
                             }
@@ -439,7 +455,7 @@ impl Editor {
                         _ => {}
                     }
                 }
-                Ok(false)
+                return Ok(false);
             }
             "lsp" => {
                 // LSP commands
