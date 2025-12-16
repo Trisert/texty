@@ -334,6 +334,33 @@ fn test_ui_widgets() {
 }
 
 #[test]
+fn test_command_line_file_opening() {
+    use texty::editor::Editor;
+    use tempfile::TempDir;
+    use std::fs;
+
+    // Create a temporary file with some content
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test_open.rs");
+    let test_content = "fn main() {\n    println!(\"Hello, world!\");\n}\n";
+    fs::write(&file_path, test_content).unwrap();
+
+    // Create editor and open the file
+    let mut editor = Editor::new();
+    let open_result = editor.open_file(file_path.to_str().unwrap());
+    assert!(open_result.is_ok(), "File should open successfully");
+
+    // Verify the content was loaded
+    assert_eq!(editor.buffer.line_count(), 4); // fn main() {\n    println!("Hello, world!");\n}\n has 4 lines
+    assert_eq!(editor.buffer.line(0).unwrap(), "fn main() {");
+    assert_eq!(editor.buffer.line(1).unwrap(), "    println!(\"Hello, world!\");");
+    assert_eq!(editor.buffer.line(2).unwrap(), "}");
+
+    // Verify file path is set
+    assert_eq!(editor.buffer.file_path, Some(file_path.to_str().unwrap().to_string()));
+}
+
+#[test]
 fn test_backspace_bounds_checking() {
     use texty::command::Command;
     use texty::editor::Editor;

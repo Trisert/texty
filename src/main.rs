@@ -4,6 +4,7 @@ use crossterm::{
 };
 use texty::ui::renderer::TuiRenderer;
 use texty::{command::Command, editor::Editor, mode::Mode};
+use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,6 +15,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize editor
     let mut editor = Editor::new();
+
+    // Parse command-line arguments
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 {
+        // Open the specified file
+        let file_path = &args[1];
+        if let Err(e) = editor.open_file(file_path) {
+            eprintln!("Error opening file '{}': {}", file_path, e);
+            // Continue with empty buffer if file can't be opened
+        }
+    }
 
     // Initialize renderer
     let mut renderer = TuiRenderer::new()?;
