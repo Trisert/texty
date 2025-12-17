@@ -63,9 +63,9 @@ fn test_syntax_highlighting() {
         .as_ref()
         .unwrap()
         .get_line_highlights(0);
-    assert!(highlights.is_some());
+    assert!(highlights.is_some(), "Should have highlights on line 0");
     // At least one highlight (fn keyword)
-    assert!(!highlights.unwrap().is_empty());
+    assert!(!highlights.unwrap().is_empty(), "Should have at least one highlight token");
 }
 
 #[test]
@@ -327,17 +327,14 @@ fn test_ui_widgets() {
     let _completion_popup = texty::ui::widgets::completion::CompletionPopup::new();
 
     // Test theme color methods
-    assert_eq!(
-        theme.syntax_color(&texty::syntax::HighlightKind::Keyword),
-        ratatui::style::Color::Cyan
-    );
+    assert_eq!(theme.syntax_color("keyword"), ratatui::style::Color::Cyan);
 }
 
 #[test]
 fn test_command_line_file_opening() {
-    use texty::editor::Editor;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
+    use texty::editor::Editor;
 
     // Create a temporary file with some content
     let temp_dir = TempDir::new().unwrap();
@@ -353,11 +350,17 @@ fn test_command_line_file_opening() {
     // Verify the content was loaded
     assert_eq!(editor.buffer.line_count(), 4); // fn main() {\n    println!("Hello, world!");\n}\n has 4 lines
     assert_eq!(editor.buffer.line(0).unwrap(), "fn main() {");
-    assert_eq!(editor.buffer.line(1).unwrap(), "    println!(\"Hello, world!\");");
+    assert_eq!(
+        editor.buffer.line(1).unwrap(),
+        "    println!(\"Hello, world!\");"
+    );
     assert_eq!(editor.buffer.line(2).unwrap(), "}");
 
     // Verify file path is set
-    assert_eq!(editor.buffer.file_path, Some(file_path.to_str().unwrap().to_string()));
+    assert_eq!(
+        editor.buffer.file_path,
+        Some(file_path.to_str().unwrap().to_string())
+    );
 }
 
 #[test]
@@ -396,8 +399,8 @@ fn test_backspace_bounds_checking() {
 
 #[test]
 fn test_arrow_key_movement() {
-    use texty::editor::Editor;
     use texty::command::Command;
+    use texty::editor::Editor;
 
     let mut editor = Editor::new();
     editor.buffer.insert_text("Hello World", 0, 0).unwrap();

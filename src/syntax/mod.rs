@@ -3,11 +3,13 @@ pub mod config;
 pub mod highlighter;
 pub mod language;
 pub mod query_loader;
+pub mod theme;
 
-pub use config::{load_languages_config, LanguageRegistry};
-pub use highlighter::{HighlightKind, HighlightToken, SyntaxHighlighter};
+pub use config::{LanguageRegistry, load_languages_config};
+pub use highlighter::{HighlightToken, SyntaxHighlighter};
 pub use language::get_language_config;
 pub use query_loader::QueryLoader;
+pub use theme::{ResolvedStyle, Theme};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LanguageId {
@@ -23,6 +25,10 @@ pub struct LanguageConfig {
     pub tree_sitter_language: fn() -> tree_sitter::Language,
     pub highlight_query_path: Option<String>,
     pub highlight_query_fallback: &'static str,
+    pub injection_query_path: Option<String>,
+    pub injection_query_fallback: Option<&'static str>,
+    pub locals_query_path: Option<String>,
+    pub locals_query_fallback: Option<&'static str>,
 }
 
 #[cfg(test)]

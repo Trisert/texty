@@ -78,20 +78,27 @@ impl Widget for EditorPane<'_> {
                     let mut highlight_ranges = Vec::new();
 
                     // Add syntax highlights
+                    let line_text = self.editor.buffer.line(line_idx).unwrap();
+                    let line_start_byte = self.editor.buffer.rope.line_to_byte(line_idx);
+
                     for token in highlights {
-                        if token.start >= self.editor.viewport.offset_col
-                            && token.start < self.editor.viewport.offset_col + visible_line.len()
+                        let rel_byte_start = token.start - line_start_byte;
+                        let rel_byte_end = token.end - line_start_byte;
+                        let char_start = line_text[0..rel_byte_start].chars().count();
+                        let char_end = line_text[0..rel_byte_end].chars().count();
+
+                        if char_start < self.editor.viewport.offset_col + visible_line.len()
+                            && char_end > self.editor.viewport.offset_col
                         {
-                            let start = token.start.saturating_sub(self.editor.viewport.offset_col);
-                            let end = token
-                                .end
+                            let start = char_start.saturating_sub(self.editor.viewport.offset_col);
+                            let end = char_end
                                 .min(self.editor.viewport.offset_col + visible_line.len())
                                 .saturating_sub(self.editor.viewport.offset_col);
 
                             highlight_ranges.push((
                                 start,
                                 end,
-                                self.theme.syntax_color(&token.kind),
+                                self.theme.syntax_color(&token.capture_name),
                             ));
                         }
                     }
@@ -119,10 +126,11 @@ impl Widget for EditorPane<'_> {
                     let mut merged_ranges: Vec<(usize, usize, ratatui::style::Color)> = Vec::new();
                     for (start, end, color) in highlight_ranges {
                         if let Some((_, last_end, _)) = merged_ranges.last_mut()
-                            && *last_end >= start {
-                                *last_end = (*last_end).max(end);
-                                continue;
-                            }
+                            && *last_end >= start
+                        {
+                            *last_end = (*last_end).max(end);
+                            continue;
+                        }
                         merged_ranges.push((start, end, color));
                     }
 

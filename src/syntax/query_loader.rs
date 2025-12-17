@@ -30,7 +30,9 @@ impl QueryLoader {
                 Err(_) => {
                     // Fallback to embedded query if file doesn't exist
                     fallback_query
-                        .ok_or_else(|| format!("Query file not found and no fallback provided: {}", path))?
+                        .ok_or_else(|| {
+                            format!("Query file not found and no fallback provided: {}", path)
+                        })?
                         .to_string()
                 }
             };
@@ -77,7 +79,9 @@ mod tests {
         let fallback_query = "(function_item) @function";
 
         // This should use the fallback since the path doesn't exist
-        let query = loader.load_query(language, "nonexistent/path.scm", Some(fallback_query)).unwrap();
+        let query = loader
+            .load_query(language, "nonexistent/path.scm", Some(fallback_query))
+            .unwrap();
         assert!(query.capture_names().contains(&"function".to_string()));
     }
 
@@ -88,11 +92,15 @@ mod tests {
         let fallback_query = "(function_item) @function";
 
         // First load
-        loader.load_query(language, "test/path.scm", Some(fallback_query)).unwrap();
+        loader
+            .load_query(language, "test/path.scm", Some(fallback_query))
+            .unwrap();
         assert_eq!(loader.cache_size(), 1);
 
         // Second load should use cache
-        loader.load_query(language, "test/path.scm", Some(fallback_query)).unwrap();
+        loader
+            .load_query(language, "test/path.scm", Some(fallback_query))
+            .unwrap();
         assert_eq!(loader.cache_size(), 1);
     }
 }

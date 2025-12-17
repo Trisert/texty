@@ -3,12 +3,12 @@
 use ratatui::style::Color;
 
 /// Theme configuration
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Theme {
     pub general: GeneralTheme,
     pub syntax: SyntaxTheme,
     pub ui: UiTheme,
+    pub loaded_syntax_theme: Option<crate::syntax::Theme>,
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +39,6 @@ pub struct UiTheme {
     pub diagnostic_info: Color,
     pub diagnostic_hint: Color,
 }
-
 
 impl Default for GeneralTheme {
     fn default() -> Self {
@@ -80,15 +79,33 @@ impl Default for UiTheme {
 }
 
 impl Theme {
-    /// Get syntax color for a highlight kind
-    pub fn syntax_color(&self, kind: &crate::syntax::HighlightKind) -> Color {
-        match kind {
-            crate::syntax::HighlightKind::Keyword => self.syntax.keyword,
-            crate::syntax::HighlightKind::Function => self.syntax.function,
-            crate::syntax::HighlightKind::Type => self.syntax.r#type,
-            crate::syntax::HighlightKind::String => self.syntax.string,
-            crate::syntax::HighlightKind::Comment => self.syntax.comment,
-            crate::syntax::HighlightKind::Variable => self.syntax.variable,
+    /// Get syntax color for a capture name
+    pub fn syntax_color(&self, capture_name: &str) -> Color {
+        // If we have a loaded theme, use it
+        if let Some(loaded_theme) = &self.loaded_syntax_theme {
+            let style = loaded_theme.get_style(capture_name);
+            if let Some(color) = style.fg {
+                // Convert syntax::theme::Color to ratatui::Color
+                Color::Rgb(color.r, color.g, color.b)
+            } else {
+                self.general.foreground
+            }
+        } else {
+            // Fallback to hardcoded colors
+            match capture_name {
+                "keyword" => self.syntax.keyword,
+                "function" | "function.macro" => self.syntax.function,
+                "type" | "type.builtin" => self.syntax.r#type,
+                "string" | "string.escape" => self.syntax.string,
+                "comment" => self.syntax.comment,
+                "variable" | "variable.member" => self.syntax.variable,
+                "constant.builtin" | "constant.numeric.integer" | "constant.numeric.float" => {
+                    Color::Cyan
+                }
+                "operator" => Color::Yellow,
+                "punctuation.bracket" => Color::White,
+                _ => self.general.foreground, // default color
+            }
         }
     }
 }

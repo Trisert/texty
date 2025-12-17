@@ -399,10 +399,11 @@ impl Drop for LspClient {
         // Note: shutdown() is async, so we can't call it here
         // The transport will be dropped automatically
         if let Ok(mut guard) = self.process_handle.try_lock()
-            && let Some(mut child) = guard.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
+            && let Some(mut child) = guard.take()
+        {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 

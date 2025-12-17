@@ -1,4 +1,4 @@
-use crate::syntax::{LanguageId, SyntaxHighlighter, get_language_config};
+use crate::syntax::{LanguageId, LanguageRegistry, SyntaxHighlighter, get_language_config};
 use ropey::Rope;
 use std::fs;
 use std::path::Path;
@@ -194,6 +194,44 @@ impl Buffer {
         self.version += 1;
         // TODO: Update highlighter
         Ok((new_line, new_col))
+    }
+
+    /// Set language using registry (for dynamic language detection)
+    pub fn set_language_from_registry(
+        &mut self,
+        registry: &LanguageRegistry,
+    ) -> Result<(), BufferError> {
+        if let Some(extension) = self
+            .file_path
+            .as_ref()
+            .and_then(|p| std::path::Path::new(p).extension())
+            && let Some(ext_str) = extension.to_str()
+            && let Some(lang_entry) = registry.get_language_by_extension(ext_str)
+            && let Some(config) = crate::syntax::language::get_language_config_from_registry(
+                registry,
+                &lang_entry.name,
+            )
+        {
+            self.highlighter = Some(SyntaxHighlighter::new(config).map_err(|_| {
+                BufferError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Syntax error",
+                ))
+            })?);
+            // Parse current content
+            let content = self.rope.to_string();
+            self.highlighter
+                .as_mut()
+                .unwrap()
+                .parse(&content)
+                .map_err(|_| {
+                    BufferError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Parse error",
+                    ))
+                })?;
+        }
+        Ok(())
     }
 
     pub fn update_highlighter(&mut self) -> Result<(), BufferError> {

@@ -7,24 +7,40 @@ pub fn get_language_config(id: LanguageId) -> LanguageConfig {
             tree_sitter_language: || tree_sitter_rust::language(),
             highlight_query_path: Some("runtime/queries/rust/highlights.scm".to_string()),
             highlight_query_fallback: include_str!("../../queries/rust/highlights.scm"),
+            injection_query_path: None,
+            injection_query_fallback: None,
+            locals_query_path: None,
+            locals_query_fallback: None,
         },
         LanguageId::Python => LanguageConfig {
             id,
             tree_sitter_language: || tree_sitter_python::language(),
             highlight_query_path: Some("runtime/queries/python/highlights.scm".to_string()),
             highlight_query_fallback: include_str!("../../queries/python/highlights.scm"),
+            injection_query_path: None,
+            injection_query_fallback: None,
+            locals_query_path: None,
+            locals_query_fallback: None,
         },
         LanguageId::JavaScript => LanguageConfig {
             id,
             tree_sitter_language: || tree_sitter_javascript::language(),
             highlight_query_path: Some("runtime/queries/javascript/highlights.scm".to_string()),
             highlight_query_fallback: include_str!("../../queries/javascript/highlights.scm"),
+            injection_query_path: None,
+            injection_query_fallback: None,
+            locals_query_path: None,
+            locals_query_fallback: None,
         },
         LanguageId::TypeScript => LanguageConfig {
             id,
             tree_sitter_language: || tree_sitter_typescript::language_typescript(),
             highlight_query_path: Some("runtime/queries/typescript/highlights.scm".to_string()),
             highlight_query_fallback: include_str!("../../queries/typescript/highlights.scm"),
+            injection_query_path: None,
+            injection_query_fallback: None,
+            locals_query_path: None,
+            locals_query_fallback: None,
         },
     }
 }
@@ -40,7 +56,10 @@ pub fn get_language_config_by_extension(ext: &str) -> Option<LanguageConfig> {
 }
 
 /// Get language config from runtime registry
-pub fn get_language_config_from_registry(registry: &LanguageRegistry, name: &str) -> Option<LanguageConfig> {
+pub fn get_language_config_from_registry(
+    registry: &LanguageRegistry,
+    name: &str,
+) -> Option<LanguageConfig> {
     let entry = registry.get_language_by_name(name)?;
     let id = match name {
         "rust" => LanguageId::Rust,
@@ -65,6 +84,10 @@ pub fn get_language_config_from_registry(registry: &LanguageRegistry, name: &str
             LanguageId::JavaScript => include_str!("../../queries/javascript/highlights.scm"),
             LanguageId::TypeScript => include_str!("../../queries/typescript/highlights.scm"),
         },
+        injection_query_path: entry.injection_query.clone(),
+        injection_query_fallback: None, // TODO: add fallbacks
+        locals_query_path: None,        // TODO: add locals queries
+        locals_query_fallback: None,
     })
 }
 

@@ -2,9 +2,9 @@ use crossterm::{
     event::{Event, KeyCode, read},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use std::env;
 use texty::ui::renderer::TuiRenderer;
 use texty::{command::Command, editor::Editor, mode::Mode};
-use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -56,9 +56,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // Handle normal commands
                         let command = key_to_command(key_event, &editor.mode);
                         if let Some(cmd) = command
-                            && editor.execute_command(cmd) {
-                                break; // Quit
-                            }
+                            && editor.execute_command(cmd)
+                        {
+                            break; // Quit
+                        }
                     }
                 }
             }

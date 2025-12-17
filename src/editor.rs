@@ -9,7 +9,7 @@ use crate::lsp::diagnostics::DiagnosticManager;
 use crate::lsp::manager::LspManager;
 use crate::lsp::progress::ProgressManager;
 use crate::mode::Mode;
-use crate::syntax::LanguageId;
+use crate::syntax::{LanguageId, LanguageRegistry, load_languages_config};
 use crate::ui::widgets::completion::CompletionPopup;
 use crate::viewport::Viewport;
 use lsp_types::{Diagnostic, Url};
@@ -31,6 +31,7 @@ pub struct Editor {
     pub progress_items: Arc<Mutex<Vec<crate::lsp::progress::ProgressItem>>>, // Synchronous access for UI
     pub progress_manager: Arc<ProgressManager>,
     pub current_language: Option<LanguageId>,
+    pub language_registry: LanguageRegistry,
     // UI overlays
     pub hover_content: Option<Vec<String>>, // Content for hover window
     pub code_actions: Option<Vec<lsp_types::CodeAction>>, // Available code actions
@@ -54,6 +55,13 @@ impl Editor {
         let formatter =
             get_formatter_config(LanguageId::Rust).and_then(|config| Formatter::new(config).ok());
 
+        let language_registry = load_languages_config()
+            .map(LanguageRegistry::new)
+            .unwrap_or_else(|_| {
+                // Fallback to empty registry if config fails to load
+                LanguageRegistry::new(crate::syntax::config::LanguagesConfig { language: vec![] })
+            });
+
         Self {
             buffer,
             cursor: Cursor::new(),
@@ -68,6 +76,7 @@ impl Editor {
             progress_items: Arc::new(Mutex::new(Vec::new())),
             progress_manager: Arc::new(ProgressManager::new()),
             current_language: Some(LanguageId::Rust), // Default to Rust for now
+            language_registry,
             hover_content: None,
             code_actions: None,
             code_action_selected: 0,
@@ -332,20 +341,22 @@ impl Editor {
     /// Navigate code actions menu
     pub fn select_next_code_action(&mut self) {
         if let Some(actions) = &self.code_actions
-            && !actions.is_empty() {
-                self.code_action_selected = (self.code_action_selected + 1) % actions.len();
-            }
+            && !actions.is_empty()
+        {
+            self.code_action_selected = (self.code_action_selected + 1) % actions.len();
+        }
     }
 
     pub fn select_prev_code_action(&mut self) {
         if let Some(actions) = &self.code_actions
-            && !actions.is_empty() {
-                self.code_action_selected = if self.code_action_selected == 0 {
-                    actions.len() - 1
-                } else {
-                    self.code_action_selected - 1
-                };
-            }
+            && !actions.is_empty()
+        {
+            self.code_action_selected = if self.code_action_selected == 0 {
+                actions.len() - 1
+            } else {
+                self.code_action_selected - 1
+            };
+        }
     }
 
     /// Get selected code action
@@ -442,8 +453,11 @@ impl Editor {
                         "on" => {
                             // Enable syntax highlighting
                             if let Some(language_id) = self.current_language {
-                                let config = crate::syntax::language::get_language_config(language_id);
-                                if let Ok(highlighter) = crate::syntax::highlighter::SyntaxHighlighter::new(config) {
+                                let config =
+                                    crate::syntax::language::get_language_config(language_id);
+                                if let Ok(highlighter) =
+                                    crate::syntax::highlighter::SyntaxHighlighter::new(config)
+                                {
                                     self.buffer.highlighter = Some(highlighter);
                                 }
                             }
@@ -455,7 +469,7 @@ impl Editor {
                         _ => {}
                     }
                 }
-                return Ok(false);
+                Ok(false)
             }
             "lsp" => {
                 // LSP commands

@@ -1,0 +1,36 @@
+[palette]
+Red = "#ff0000"
+Green = "#00ff00"
+Blue = "#0000ff"
+Yellow = "#ffff00"
+Cyan = "#00ffff"
+Magenta = "#ff00ff"
+Gray = "#808080"
+White = "#ffffff"
+
+[keyword]
+fg = "Blue"
+
+[function]
+fg = "Green"
+
+[string]
+fg = "Red"
+
+[comment]
+fg = "Gray"
+
+[variable]
+fg = "White"
+
+[type]
+fg = "Cyan"
+
+[operator]
+fg = "Cyan"
+
+[punctuation.bracket]
+fg = "White"
+
+[string.regex]
+fg = "bright_red"

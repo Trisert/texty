@@ -21,7 +21,7 @@ mod tests {
     #[test]
     fn test_mode_clone() {
         let mode = Mode::Insert;
-        let cloned = mode.clone();
+        let cloned = mode;
         assert_eq!(mode, cloned);
     }
 }

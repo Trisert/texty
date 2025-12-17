@@ -27,7 +27,13 @@ impl TuiRenderer {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let backend = CrosstermBackend::new(std::io::stdout());
         let terminal = Terminal::new(backend)?;
-        let theme = Theme::default();
+        let mut theme = Theme::default();
+
+        // Try to load syntax theme
+        if let Ok(loaded_theme) = crate::syntax::Theme::from_file("runtime/themes/default.toml") {
+            theme.loaded_syntax_theme = Some(loaded_theme);
+        }
+
         Ok(Self { terminal, theme })
     }
 

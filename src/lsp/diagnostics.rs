@@ -57,6 +57,61 @@ impl DiagnosticManager {
     }
 }
 
+impl DiagnosticManager {
+    pub fn new() -> Self {
+        Self {
+            diagnostics: Arc::new(AsyncMutex::new(HashMap::new())),
+            sync_cache: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub async fn update_diagnostics(&self, uri: Url, diagnostics: Vec<Diagnostic>) {
+        let mut diags = self.diagnostics.lock().await;
+        diags.insert(uri.clone(), diagnostics.clone());
+
+        // Update sync cache
+        let mut cache = self.sync_cache.lock().unwrap();
+        cache.insert(uri, diagnostics);
+    }
+
+    pub async fn get_diagnostics_at_line(&self, uri: &Url, line: u32) -> Vec<Diagnostic> {
+        let diags = self.diagnostics.lock().await;
+        if let Some(file_diags) = diags.get(uri) {
+            file_diags
+                .iter()
+                .filter(|d| d.range.start.line == line)
+                .cloned()
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+
+    // Synchronous version for UI rendering - uses sync cache
+    pub fn get_diagnostics_at_line_sync(&self, uri: &Url, line: u32) -> Vec<Diagnostic> {
+        let cache = self.sync_cache.lock().unwrap();
+        if let Some(file_diags) = cache.get(uri) {
+            file_diags
+                .iter()
+                .filter(|d| d.range.start.line == line)
+                .cloned()
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn diagnostic_to_color(severity: DiagnosticSeverity) -> Color {
+        match severity {
+            DiagnosticSeverity::ERROR => Color::Red,
+            DiagnosticSeverity::WARNING => Color::Yellow,
+            DiagnosticSeverity::INFORMATION => Color::Blue,
+            DiagnosticSeverity::HINT => Color::Cyan,
+            _ => Color::White,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,60 +388,5 @@ mod tests {
         assert_eq!(line_1_diags.len(), 2);
         assert!(line_1_diags.iter().any(|d| d.message == "Line 1 warning"));
         assert!(line_1_diags.iter().any(|d| d.message == "Line 1 info"));
-    }
-}
-
-impl DiagnosticManager {
-    pub fn new() -> Self {
-        Self {
-            diagnostics: Arc::new(AsyncMutex::new(HashMap::new())),
-            sync_cache: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    pub async fn update_diagnostics(&self, uri: Url, diagnostics: Vec<Diagnostic>) {
-        let mut diags = self.diagnostics.lock().await;
-        diags.insert(uri.clone(), diagnostics.clone());
-
-        // Update sync cache
-        let mut cache = self.sync_cache.lock().unwrap();
-        cache.insert(uri, diagnostics);
-    }
-
-    pub async fn get_diagnostics_at_line(&self, uri: &Url, line: u32) -> Vec<Diagnostic> {
-        let diags = self.diagnostics.lock().await;
-        if let Some(file_diags) = diags.get(uri) {
-            file_diags
-                .iter()
-                .filter(|d| d.range.start.line == line)
-                .cloned()
-                .collect()
-        } else {
-            vec![]
-        }
-    }
-
-    // Synchronous version for UI rendering - uses sync cache
-    pub fn get_diagnostics_at_line_sync(&self, uri: &Url, line: u32) -> Vec<Diagnostic> {
-        let cache = self.sync_cache.lock().unwrap();
-        if let Some(file_diags) = cache.get(uri) {
-            file_diags
-                .iter()
-                .filter(|d| d.range.start.line == line)
-                .cloned()
-                .collect()
-        } else {
-            vec![]
-        }
-    }
-
-    pub fn diagnostic_to_color(severity: DiagnosticSeverity) -> Color {
-        match severity {
-            DiagnosticSeverity::ERROR => Color::Red,
-            DiagnosticSeverity::WARNING => Color::Yellow,
-            DiagnosticSeverity::INFORMATION => Color::Blue,
-            DiagnosticSeverity::HINT => Color::Cyan,
-            _ => Color::White,
-        }
     }
 }

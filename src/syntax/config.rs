@@ -56,7 +56,8 @@ impl LanguageRegistry {
     }
 
     pub fn get_language_by_extension(&self, ext: &str) -> Option<&LanguageEntry> {
-        self.extension_map.get(ext)
+        self.extension_map
+            .get(ext)
             .and_then(|name| self.languages.get(name))
     }
 
@@ -78,16 +79,14 @@ mod tests {
         // This would need a test languages.toml file
         // For now, just test the structure
         let config = LanguagesConfig {
-            language: vec![
-                LanguageEntry {
-                    name: "rust".to_string(),
-                    scope: Some("source.rust".to_string()),
-                    file_types: vec!["rs".to_string()],
-                    grammar: Some("rust".to_string()),
-                    highlight_query: Some("runtime/queries/rust/highlights.scm".to_string()),
-                    injection_query: None,
-                }
-            ]
+            language: vec![LanguageEntry {
+                name: "rust".to_string(),
+                scope: Some("source.rust".to_string()),
+                file_types: vec!["rs".to_string()],
+                grammar: Some("rust".to_string()),
+                highlight_query: Some("runtime/queries/rust/highlights.scm".to_string()),
+                injection_query: None,
+            }],
         };
 
         let registry = LanguageRegistry::new(config);
