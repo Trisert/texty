@@ -47,14 +47,23 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         let block = Block::default()
             .style(Style::default().bg(Color::Black));
 
-        // Split the area: search input + results list
-        let chunks = Layout::default()
+        // Split the area: search input + (file list + preview)
+        let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3), // Search input area
-                Constraint::Min(1),    // Results list
+                Constraint::Min(1),    // File list + preview area
             ])
             .split(block.inner(area));
+
+        // Split the bottom area: file list + preview
+        let horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50), // File list
+                Constraint::Percentage(50), // Preview
+            ])
+            .split(vertical_chunks[1]);
 
         // Render the block
         block.render(area, buf);
@@ -69,13 +78,14 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             .block(search_block)
             .style(Style::default().fg(Color::White));
 
-        search_paragraph.render(chunks[0], buf);
+        search_paragraph.render(vertical_chunks[0], buf);
 
-        // Results list
-        let results_block = Block::default()
-            .borders(Borders::NONE);
+        // File list (left side)
+        let file_list_block = Block::default()
+            .borders(Borders::NONE)
+            .title("Files");
 
-        let mut result_lines = Vec::new();
+        let mut file_lines = Vec::new();
 
         // Show filtered results (up to 10 items)
         let start_idx = self.state.scroll_offset;
@@ -116,15 +126,25 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
                 Style::default().fg(Color::White)
             };
 
-            result_lines.push(Line::from(spans).style(style));
+            file_lines.push(Line::from(spans).style(style));
         }
 
-        // Minimalistic: no item count
-
-        let results_paragraph = Paragraph::new(result_lines)
-            .block(results_block)
+        let file_list_paragraph = Paragraph::new(file_lines)
+            .block(file_list_block)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        results_paragraph.render(chunks[1], buf);
+        file_list_paragraph.render(horizontal_chunks[0], buf);
+
+        // Preview pane (right side)
+        let preview_block = Block::default()
+            .borders(Borders::NONE)
+            .title("Preview");
+
+        let preview_text = self.state.preview_content.as_deref().unwrap_or("Select a file to preview");
+        let preview_paragraph = Paragraph::new(preview_text)
+            .block(preview_block)
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        preview_paragraph.render(horizontal_chunks[1], buf);
     }
 }

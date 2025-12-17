@@ -24,6 +24,7 @@ pub struct FuzzySearchState {
     pub selected_index: usize,
     pub scroll_offset: usize,
     pub is_scanning: bool,
+    pub preview_content: Option<String>,
 }
 
 impl Default for FuzzySearchState {
@@ -36,6 +37,7 @@ impl Default for FuzzySearchState {
             selected_index: 0,
             scroll_offset: 0,
             is_scanning: false,
+            preview_content: None,
         }
     }
 }
@@ -71,12 +73,14 @@ impl FuzzySearchState {
 
         self.selected_index = 0;
         self.scroll_offset = 0;
+        self.update_preview();
     }
 
     pub fn select_next(&mut self) {
         if self.selected_index < self.filtered_items.len().saturating_sub(1) {
             self.selected_index += 1;
             self.update_scroll();
+            self.update_preview();
         }
     }
 
@@ -84,6 +88,7 @@ impl FuzzySearchState {
         if self.selected_index > 0 {
             self.selected_index = self.selected_index.saturating_sub(1);
             self.update_scroll();
+            self.update_preview();
         }
     }
 
@@ -109,6 +114,42 @@ impl FuzzySearchState {
     pub fn rescan_current_directory(&mut self) {
         self.all_items = scan_directory(&self.current_path);
         self.update_filter();
+    }
+
+    pub fn update_preview(&mut self) {
+        if let Some(item) = self.get_selected_item() {
+            if !item.is_dir && !item.is_binary {
+                // Try to read the first few lines of the file
+                match std::fs::read_to_string(&item.path) {
+                    Ok(content) => {
+                        // Take first 10 lines or first 500 characters
+                        let preview: String = content
+                            .lines()
+                            .take(10)
+                            .collect::<Vec<&str>>()
+                            .join("\n");
+
+                        // Limit to 500 chars if longer
+                        let preview = if preview.len() > 500 {
+                            preview.chars().take(500).collect::<String>() + "..."
+                        } else {
+                            preview
+                        };
+
+                        self.preview_content = Some(preview);
+                    }
+                    Err(_) => {
+                        self.preview_content = Some("(Unable to read file)".to_string());
+                    }
+                }
+            } else if item.is_dir {
+                self.preview_content = Some("(Directory)".to_string());
+            } else {
+                self.preview_content = Some("(Binary file)".to_string());
+            }
+        } else {
+            self.preview_content = None;
+        }
     }
 }
 
