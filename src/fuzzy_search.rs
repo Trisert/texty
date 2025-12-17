@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -14,6 +15,19 @@ pub struct FileItem {
     pub is_binary: bool,
 }
 
+/// Cached preview content types
+#[derive(Debug, Clone)]
+pub enum PreviewCache {
+    PlainContent(String), // Plain text content for files (fallback)
+    HighlightedContent(Vec<ratatui::text::Line<'static>>), // Syntax highlighted lines
+    FormattedContent(String), // Formatted plain content
+    FormattedHighlighted(Vec<ratatui::text::Line<'static>>), // Formatted + syntax highlighted
+    Directory(Vec<String>), // Directory listing
+    Binary,               // Binary file marker
+    LargeFile,            // File too large marker
+    Error(String),        // Error message
+}
+
 /// State for fuzzy file search
 #[derive(Debug)]
 pub struct FuzzySearchState {
@@ -24,8 +38,10 @@ pub struct FuzzySearchState {
     pub selected_index: usize,
     pub scroll_offset: usize,
     pub is_scanning: bool,
-    pub preview_content: Option<String>,
-    pub preview_highlights: Vec<(usize, usize, String)>, // (start, end, highlight_type)
+    pub show_preview: bool,
+    pub show_formatted_preview: bool, // NEW: Toggle formatted preview
+    pub preview_cache: HashMap<PathBuf, PreviewCache>,
+    pub formatted_preview_cache: HashMap<PathBuf, crate::ui::widgets::preview::PreviewBuffer>, // NEW: Cache for formatted previews
 }
 
 impl Default for FuzzySearchState {
@@ -38,8 +54,10 @@ impl Default for FuzzySearchState {
             selected_index: 0,
             scroll_offset: 0,
             is_scanning: false,
-            preview_content: None,
-            preview_highlights: Vec::new(),
+            show_preview: true,
+            show_formatted_preview: true, // Default: formatted preview enabled
+            preview_cache: HashMap::new(),
+            formatted_preview_cache: HashMap::new(),
         }
     }
 }
@@ -50,45 +68,34 @@ impl FuzzySearchState {
     }
 
     pub fn update_filter(&mut self) {
+        self.query = self.query.trim().to_string();
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+
+        // Filter items based on query
         if self.query.is_empty() {
             self.filtered_items = self.all_items.clone();
         } else {
-            let query_lower = self.query.to_lowercase();
-            self.filtered_items = self.all_items
+            self.filtered_items = self
+                .all_items
                 .iter()
-                .filter(|item| {
-                    fuzzy_match(&query_lower, &item.name.to_lowercase()).is_some()
-                })
+                .filter(|item| fuzzy_match(&self.query, &item.name).is_some())
                 .cloned()
                 .collect();
-
-            // Sort by fuzzy score and then by recency
-            self.filtered_items.sort_by(|a, b| {
-                let score_a = fuzzy_match(&query_lower, &a.name.to_lowercase()).unwrap_or(0);
-                let score_b = fuzzy_match(&query_lower, &b.name.to_lowercase()).unwrap_or(0);
-
-                // Higher score first, then newer files first
-                score_b.cmp(&score_a)
-                    .then_with(|| b.modified.cmp(&a.modified))
-            });
         }
-
-        self.selected_index = 0;
-        self.scroll_offset = 0;
-        self.update_preview();
     }
 
     pub fn select_next(&mut self) {
         if self.selected_index < self.filtered_items.len().saturating_sub(1) {
             self.selected_index += 1;
-            self.update_preview();
+            self.update_preview(None);
         }
     }
 
     pub fn select_prev(&mut self) {
         if self.selected_index > 0 {
             self.selected_index = self.selected_index.saturating_sub(1);
-            self.update_preview();
+            self.update_preview(None);
         }
     }
 
@@ -105,28 +112,149 @@ impl FuzzySearchState {
     pub fn rescan_current_directory(&mut self) {
         self.all_items = scan_directory(&self.current_path);
         self.update_filter();
+        self.update_preview(None);
     }
 
-    pub fn update_preview(&mut self) {
+    pub fn update_preview(&mut self, _formatter: Option<&crate::formatter::external::Formatter>) {
+        // Clear cache when selection changes to ensure fresh content
+        self.preview_cache.clear();
+
         if let Some(item) = self.get_selected_item() {
-            if !item.is_dir && !item.is_binary {
-                // Try to read the entire file
-                match std::fs::read_to_string(&item.path) {
-                    Ok(content) => {
-                        self.preview_content = Some(content);
-                    }
-                    Err(_) => {
-                        self.preview_content = Some("(Unable to read file)".to_string());
+            let item = item.clone(); // Clone to avoid borrowing issues
+
+            // Check if we already have this item cached
+            if self.preview_cache.contains_key(&item.path) {
+                return; // Already cached
+            }
+
+            // Following Helix's pattern: check file type and cache appropriately
+            if item.is_dir {
+                // For directories, scan and cache the contents
+                self.preview_cache.insert(
+                    item.path.clone(),
+                    PreviewCache::Directory(self.scan_directory_preview(&item.path)),
+                );
+            } else if item.is_binary {
+                self.preview_cache
+                    .insert(item.path.clone(), PreviewCache::Binary);
+            } else {
+                // For text files, read content and format if needed
+                self.load_file_preview(&item, self.show_formatted_preview);
+            }
+        }
+    }
+
+    fn scan_directory_preview(&self, path: &PathBuf) -> Vec<String> {
+        let mut entries = Vec::new();
+
+        if let Ok(read_dir) = fs::read_dir(path) {
+            for entry in read_dir.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if metadata.is_dir() {
+                        entries.push(format!("{}/", name));
+                    } else {
+                        entries.push(name);
                     }
                 }
-            } else if item.is_dir {
-                self.preview_content = Some("(Directory)".to_string());
-            } else {
-                self.preview_content = Some("(Binary file)".to_string());
             }
-        } else {
-            self.preview_content = None;
         }
+
+        // Sort: directories first, then files, alphabetically
+        entries.sort_by(|a, b| {
+            let a_is_dir = a.ends_with('/');
+            let b_is_dir = b.ends_with('/');
+            match (a_is_dir, b_is_dir) {
+                (true, false) => std::cmp::Ordering::Less, // directories first
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.cmp(b),
+            }
+        });
+
+        entries
+    }
+
+    fn load_file_preview(&mut self, item: &FileItem, format_content: bool) {
+        // Check file size - don't preview files larger than 10MB (following Helix)
+        const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
+        if item.size.unwrap_or(0) > MAX_FILE_SIZE {
+            self.preview_cache
+                .insert(item.path.clone(), PreviewCache::LargeFile);
+            return;
+        }
+
+        // Try to read the file
+        match fs::read(&item.path) {
+            Ok(bytes) => {
+                // Check if file contains binary data
+                let is_binary = bytes.contains(&0)
+                    || bytes
+                        .iter()
+                        .any(|&b| b.is_ascii_control() && !matches!(b, b'\n' | b'\r' | b'\t'));
+
+                if is_binary {
+                    self.preview_cache
+                        .insert(item.path.clone(), PreviewCache::Binary);
+                    return;
+                }
+
+                // Convert to string
+                match String::from_utf8(bytes) {
+                    Ok(content) => {
+                        // Limit preview to first 1000 lines to prevent performance issues
+                        let lines: Vec<&str> = content.lines().take(1000).collect();
+                        let truncated_content = if lines.len() >= 1000 {
+                            format!("{}\n... (truncated)", lines.join("\n"))
+                        } else {
+                            lines.join("\n")
+                        };
+
+                        if format_content {
+                            // TODO: Dynamic formatting will be handled by FuzzySearchWidget
+                            // For now, store plain content - widget will format on demand
+                            self.preview_cache.insert(
+                                item.path.clone(),
+                                PreviewCache::PlainContent(truncated_content),
+                            );
+                        } else {
+                            // Store as plain content
+                            self.preview_cache.insert(
+                                item.path.clone(),
+                                PreviewCache::PlainContent(truncated_content),
+                            );
+                        }
+                    }
+                    Err(_) => {
+                        self.preview_cache
+                            .insert(item.path.clone(), PreviewCache::Binary);
+                    }
+                }
+            }
+            Err(e) => {
+                self.preview_cache.insert(
+                    item.path.clone(),
+                    PreviewCache::Error(format!("Unable to read file: {}", e)),
+                );
+            }
+        }
+    }
+
+    pub fn get_preview(&self, path: &PathBuf) -> Option<&PreviewCache> {
+        self.preview_cache.get(path)
+    }
+
+    pub fn toggle_preview(&mut self) {
+        self.show_preview = !self.show_preview;
+        // Clear cache when toggling to ensure fresh content when re-enabled
+        if !self.show_preview {
+            self.preview_cache.clear();
+        }
+    }
+
+    pub fn toggle_formatted_preview(&mut self) {
+        self.show_formatted_preview = !self.show_formatted_preview;
+        // Clear cache when toggling to ensure fresh content with new formatting
+        self.preview_cache.clear();
     }
 }
 
@@ -160,11 +288,12 @@ pub fn scan_directory(path: &PathBuf) -> Vec<FileItem> {
                 } else {
                     // Simple binary detection: check file extension
                     let path = entry.path();
-                    let ext = path.extension()
-                        .and_then(|e| e.to_str())
-                        .unwrap_or("");
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-                    matches!(ext, "exe" | "dll" | "bin" | "obj" | "lib" | "a" | "so" | "dylib" | "pdb")
+                    matches!(
+                        ext,
+                        "exe" | "dll" | "bin" | "obj" | "lib" | "a" | "so" | "dylib" | "pdb"
+                    )
                 };
 
                 items.push(FileItem {
@@ -183,7 +312,7 @@ pub fn scan_directory(path: &PathBuf) -> Vec<FileItem> {
     // Sort: files first, then directories, both alphabetically
     items.sort_by(|a, b| {
         match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Greater,  // files before directories
+            (true, false) => std::cmp::Ordering::Greater, // files before directories
             (false, true) => std::cmp::Ordering::Less,
             _ => a.name.cmp(&b.name),
         }
@@ -205,7 +334,7 @@ fn fuzzy_match(query: &str, target: &str) -> Option<i32> {
     let mut score = 0;
     let mut query_idx = 0;
 
-    for (_i, &ch) in target_chars.iter().enumerate() {
+    for &ch in &target_chars {
         if query_idx < query_chars.len() && ch == query_chars[query_idx] {
             // Base score for match
             score += 9;

@@ -23,19 +23,28 @@ impl Widget for StatusBar<'_> {
         let progress_info = self.get_progress_info();
 
         // Format the status line
-        let status = format!(
-            " {} | {}:{} | Modified: {} | LSP: {}{} ",
+        let base_status = format!(
+            " {} | {}:{} | Modified: {}",
             mode_to_str(&self.editor.mode),
             self.editor.cursor.line,
             self.editor.cursor.col,
-            self.editor.buffer.modified,
-            lsp_status,
-            if progress_info.is_empty() {
-                String::new()
-            } else {
-                format!(" | {}", progress_info)
-            }
+            self.editor.buffer.modified
         );
+
+        let status = if let Some(msg) = &self.editor.status_message {
+            format!("{} | {}", base_status, msg)
+        } else {
+            format!(
+                "{} | LSP: {}{}",
+                base_status,
+                lsp_status,
+                if progress_info.is_empty() {
+                    String::new()
+                } else {
+                    format!(" | {}", progress_info)
+                }
+            )
+        };
 
         // Pad the status text to fill the entire width
         let padded_status = if status.len() < area.width as usize {

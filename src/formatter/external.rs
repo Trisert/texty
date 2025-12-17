@@ -54,7 +54,12 @@ pub fn get_formatter_config(language: LanguageId) -> Option<FormatterConfig> {
     match language {
         LanguageId::Rust => Some(FormatterConfig {
             command: "rustfmt".to_string(),
-            args: vec!["--emit".to_string(), "stdout".to_string()],
+            args: vec![
+                "--edition".to_string(),
+                "2024".to_string(),
+                "--emit".to_string(),
+                "stdout".to_string(),
+            ],
             stdin_mode: true,
         }),
         LanguageId::Python => Some(FormatterConfig {

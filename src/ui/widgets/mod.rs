@@ -6,4 +6,5 @@ pub mod fuzzy_search;
 pub mod gutter;
 pub mod hover;
 pub mod menu;
+pub mod preview;
 pub mod status_bar;

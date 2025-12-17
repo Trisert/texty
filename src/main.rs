@@ -147,7 +147,9 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             KeyCode::Enter => Some(Command::FuzzySearchSelect),
             KeyCode::Up | KeyCode::Char('k') => Some(Command::FuzzySearchUp),
             KeyCode::Down | KeyCode::Char('j') => Some(Command::FuzzySearchDown),
-            KeyCode::Char(c) if c.is_alphanumeric() || c == ' ' || c == '.' || c == '_' || c == '-' => {
+            KeyCode::Char(c)
+                if c.is_alphanumeric() || c == ' ' || c == '.' || c == '_' || c == '-' =>
+            {
                 // Add character to fuzzy search query
                 Some(Command::InsertChar(c))
             }

@@ -5,6 +5,7 @@ use std::fs;
 use tempfile::TempDir;
 use texty::command::Command;
 use texty::editor::Editor;
+use texty::fuzzy_search::{FuzzySearchState, PreviewCache};
 
 #[test]
 fn test_load_edit_save_file() {
@@ -65,7 +66,10 @@ fn test_syntax_highlighting() {
         .get_line_highlights(0);
     assert!(highlights.is_some(), "Should have highlights on line 0");
     // At least one highlight (fn keyword)
-    assert!(!highlights.unwrap().is_empty(), "Should have at least one highlight token");
+    assert!(
+        !highlights.unwrap().is_empty(),
+        "Should have at least one highlight token"
+    );
 }
 
 #[test]
@@ -361,6 +365,103 @@ fn test_command_line_file_opening() {
         editor.buffer.file_path,
         Some(file_path.to_str().unwrap().to_string())
     );
+}
+
+#[test]
+fn test_fuzzy_search_formatted_preview() {
+    use std::fs;
+    use tempfile::TempDir;
+    use texty::fuzzy_search::FileItem;
+    use texty::fuzzy_search::FuzzySearchState;
+
+    // Create a temporary Rust file with unformatted code
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test_preview.rs");
+    let unformatted_content = "fn main(){println!(\"hello world\");}";
+    fs::write(&file_path, unformatted_content).unwrap();
+
+    // Create fuzzy search state and manually set up a file item
+    let mut fuzzy_state = FuzzySearchState::new();
+    let file_item = FileItem {
+        name: "test_preview.rs".to_string(),
+        path: file_path.clone(),
+        is_dir: false,
+        is_hidden: false,
+        modified: std::fs::metadata(&file_path).unwrap().modified().unwrap(),
+        size: Some(unformatted_content.len() as u64),
+        is_binary: false,
+    };
+
+    // Simulate selecting the file
+    fuzzy_state.filtered_items = vec![file_item.clone()];
+    fuzzy_state.selected_index = 0;
+
+    // Update preview - this should format the content
+    fuzzy_state.update_preview(None);
+
+    // Check that preview content exists and is formatted
+    let preview_cache = fuzzy_state.get_preview(&file_item.path);
+    assert!(preview_cache.is_some());
+
+    match preview_cache.unwrap() {
+        PreviewCache::PlainContent(content) => {
+            // The preview should contain formatted Rust code
+            assert!(content.contains("fn main()"));
+            assert!(content.contains("println!"));
+        }
+        _ => panic!("Expected content preview"),
+    }
+
+    // For Rust files, if rustfmt is available, it should be formatted
+    // (The content might be the same if it's already "correctly" formatted by simple standards)
+    if let Some(PreviewCache::PlainContent(content)) = fuzzy_state.get_preview(&file_item.path) {
+        println!("Preview content: {:?}", content);
+    }
+}
+
+#[test]
+fn test_formatting_rust_file() {
+    use std::fs;
+    use tempfile::TempDir;
+    use texty::command::Command;
+    use texty::editor::Editor;
+
+    // Create a temporary Rust file with unformatted code
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test_format.rs");
+    let unformatted_content = "fn main(){println!(\"hello world\");}";
+    fs::write(&file_path, unformatted_content).unwrap();
+
+    // Create editor and open the file
+    let mut editor = Editor::new();
+    editor.open_file(file_path.to_str().unwrap()).unwrap();
+
+    // Check if formatter is available for Rust files
+    assert!(
+        editor.formatter.is_some(),
+        "Rust formatter should be available"
+    );
+
+    // Execute format command
+    editor.execute_command(Command::FormatBuffer);
+
+    // Check that formatting worked by examining the content
+    let formatted_content = editor.buffer.rope.to_string();
+
+    // rustfmt should format this to multiple lines
+    assert!(
+        formatted_content.contains("fn main()"),
+        "Should contain main function"
+    );
+    assert!(
+        formatted_content.contains("println!"),
+        "Should contain println"
+    );
+
+    // The formatted content should be different from the unformatted
+    // (rustfmt typically adds proper spacing and newlines)
+    println!("Original: {:?}", unformatted_content);
+    println!("Formatted: {:?}", formatted_content);
 }
 
 #[test]

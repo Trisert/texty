@@ -13,9 +13,9 @@ use crate::mode::Mode;
 use crate::syntax::{LanguageId, LanguageRegistry, load_languages_config};
 use crate::ui::widgets::completion::CompletionPopup;
 use crate::viewport::Viewport;
-use std::path::PathBuf;
 use lsp_types::{Diagnostic, Url};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -41,9 +41,10 @@ pub struct Editor {
     pub code_actions: Option<Vec<lsp_types::CodeAction>>, // Available code actions
     pub code_action_selected: usize,        // Selected code action index
     // Command line
-    pub command_line: String,         // Current command line input
-    pub command_history: Vec<String>, // Command history
-    pub command_history_index: usize, // Current position in history
+    pub command_line: String,           // Current command line input
+    pub command_history: Vec<String>,   // Command history
+    pub status_message: Option<String>, // Temporary status message
+    pub command_history_index: usize,   // Current position in history
 }
 
 impl Default for Editor {
@@ -88,10 +89,16 @@ impl Editor {
             command_line: String::new(),
             command_history: Vec::new(),
             command_history_index: 0,
+            status_message: None,
         }
     }
 
     pub fn execute_command(&mut self, cmd: Command) -> bool {
+        // Clear status message on new commands (except for commands that just show status)
+        if !matches!(cmd, Command::FormatBuffer) {
+            self.status_message = None;
+        }
+
         // Returns true if should quit
         match cmd {
             Command::Quit => return true, // Signal to quit
@@ -118,10 +125,14 @@ impl Editor {
             }
             Command::InsertChar(c) => {
                 if self.mode == Mode::Insert {
-                    let _ = self.buffer.insert_char(c, self.cursor.line, self.cursor.col);
+                    let _ = self
+                        .buffer
+                        .insert_char(c, self.cursor.line, self.cursor.col);
                     self.cursor.col += 1;
                     self.notify_text_change();
-                } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch) && self.fuzzy_search.is_some() {
+                } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch)
+                    && self.fuzzy_search.is_some()
+                {
                     // Handle typing in fuzzy search
                     if let Some(fuzzy) = &mut self.fuzzy_search {
                         fuzzy.query.push(c);
@@ -132,7 +143,9 @@ impl Editor {
             Command::DeleteChar => {
                 if self.mode == Mode::Insert {
                     if self.cursor.col > 0 {
-                        let _ = self.buffer.delete_char(self.cursor.line, self.cursor.col - 1);
+                        let _ = self
+                            .buffer
+                            .delete_char(self.cursor.line, self.cursor.col - 1);
                         self.cursor.col -= 1;
                     }
                 } else if self.mode == Mode::Normal {
@@ -145,7 +158,9 @@ impl Editor {
                     } else {
                         // Backspace in normal mode: delete previous character
                         if self.cursor.col > 0 {
-                            let _ = self.buffer.delete_char(self.cursor.line, self.cursor.col - 1);
+                            let _ = self
+                                .buffer
+                                .delete_char(self.cursor.line, self.cursor.col - 1);
                             self.cursor.col -= 1;
                         }
                     }
@@ -172,7 +187,9 @@ impl Editor {
             }
             Command::FuzzySearchSelect => {
                 // Extract selected item info first to avoid borrow conflicts
-                let selected_item = self.fuzzy_search.as_ref()
+                let selected_item = self
+                    .fuzzy_search
+                    .as_ref()
                     .and_then(|f| f.get_selected_item())
                     .cloned();
 
@@ -197,13 +214,25 @@ impl Editor {
             Command::NormalMode => self.mode = Mode::Normal,
 
             Command::FormatBuffer => {
-                if let Some(formatter) = &self.formatter
-                    && let Ok((new_line, new_col)) =
-                        self.buffer
-                            .format_buffer(formatter, self.cursor.line, self.cursor.col)
-                {
-                    self.cursor.line = new_line;
-                    self.cursor.col = new_col;
+                if let Some(formatter) = &self.formatter {
+                    let cursor_line = self.cursor.line;
+                    let cursor_col = self.cursor.col;
+                    match self
+                        .buffer
+                        .format_buffer(formatter, cursor_line, cursor_col)
+                    {
+                        Ok((new_line, new_col)) => {
+                            self.cursor.line = new_line;
+                            self.cursor.col = new_col;
+                            self.status_message = Some("Formatted".to_string());
+                        }
+                        Err(e) => {
+                            self.status_message = Some(format!("Format failed: {}", e));
+                        }
+                    }
+                } else {
+                    self.status_message =
+                        Some("No formatter available for this file type".to_string());
                 }
             }
             Command::Completion => {
@@ -288,8 +317,8 @@ impl Editor {
                 }
             }
 
-             _ => {}
-         }
+            _ => {}
+        }
         // Update desired_col
         self.cursor.desired_col = self.cursor.col;
         // Scroll to keep cursor visible
@@ -567,7 +596,7 @@ impl Editor {
 
         // Scan directory and populate items
         fuzzy_state.rescan_current_directory();
-        fuzzy_state.update_preview();
+        fuzzy_state.update_preview(None);
 
         self.fuzzy_search = Some(fuzzy_state);
         self.mode = Mode::FuzzySearch;

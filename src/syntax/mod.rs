@@ -7,7 +7,7 @@ pub mod theme;
 
 pub use config::{LanguageRegistry, load_languages_config};
 pub use highlighter::{HighlightToken, SyntaxHighlighter};
-pub use language::get_language_config;
+pub use language::{get_language_config, get_language_config_by_extension};
 pub use query_loader::QueryLoader;
 pub use theme::{ResolvedStyle, Theme};
 
