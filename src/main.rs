@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Basic event loop
     loop {
         // Render
-        renderer.draw(&editor)?;
+        renderer.draw(&mut editor)?;
 
         // Read event
         match read()? {

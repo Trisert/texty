@@ -41,7 +41,7 @@ impl TuiRenderer {
     }
 
     /// Draw the editor UI
-    pub fn draw(&mut self, editor: &Editor) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn draw(&mut self, editor: &mut Editor) -> Result<(), Box<dyn std::error::Error>> {
         self.terminal.draw(|f| {
             let size = f.size();
 
@@ -60,7 +60,7 @@ impl TuiRenderer {
                     .split(size);
 
                 // Render fuzzy search in left panel
-                if let Some(fuzzy_state) = &editor.fuzzy_search {
+                if let Some(fuzzy_state) = &mut editor.fuzzy_search {
                     let fuzzy_widget = FuzzySearchWidget::new(fuzzy_state);
                     f.render_widget(fuzzy_widget, main_chunks[0]);
                 }

@@ -8,11 +8,11 @@ use ratatui::{
 use crate::fuzzy_search::FuzzySearchState;
 
 pub struct FuzzySearchWidget<'a> {
-    pub state: &'a FuzzySearchState,
+    pub state: &'a mut FuzzySearchState,
 }
 
 impl<'a> FuzzySearchWidget<'a> {
-    pub fn new(state: &'a FuzzySearchState) -> Self {
+    pub fn new(state: &'a mut FuzzySearchState) -> Self {
         Self { state }
     }
 
@@ -59,9 +59,20 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
 
         let mut file_lines = Vec::new();
 
-        // Show filtered results (up to 10 items)
+        // Calculate how many items can fit in the available height
+        let available_height = vertical_chunks[1].height as usize;
+        let max_visible_items = available_height;
+
+        // Update scroll offset based on selection
+        if self.state.selected_index < self.state.scroll_offset {
+            self.state.scroll_offset = self.state.selected_index;
+        } else if self.state.selected_index >= self.state.scroll_offset + max_visible_items {
+            self.state.scroll_offset = self.state.selected_index.saturating_sub(max_visible_items - 1);
+        }
+
+        // Show filtered results (up to available height)
         let start_idx = self.state.scroll_offset;
-        let end_idx = (start_idx + 10).min(self.state.filtered_items.len());
+        let end_idx = (start_idx + max_visible_items).min(self.state.filtered_items.len());
 
         for (i, item) in self.state.filtered_items[start_idx..end_idx].iter().enumerate() {
             let global_idx = start_idx + i;

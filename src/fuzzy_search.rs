@@ -79,7 +79,6 @@ impl FuzzySearchState {
     pub fn select_next(&mut self) {
         if self.selected_index < self.filtered_items.len().saturating_sub(1) {
             self.selected_index += 1;
-            self.update_scroll();
             self.update_preview();
         }
     }
@@ -87,17 +86,7 @@ impl FuzzySearchState {
     pub fn select_prev(&mut self) {
         if self.selected_index > 0 {
             self.selected_index = self.selected_index.saturating_sub(1);
-            self.update_scroll();
             self.update_preview();
-        }
-    }
-
-    fn update_scroll(&mut self) {
-        let max_visible = 10; // Show up to 10 items
-        if self.selected_index < self.scroll_offset {
-            self.scroll_offset = self.selected_index;
-        } else if self.selected_index >= self.scroll_offset + max_visible {
-            self.scroll_offset = self.selected_index.saturating_sub(max_visible - 1);
         }
     }
 
@@ -119,24 +108,10 @@ impl FuzzySearchState {
     pub fn update_preview(&mut self) {
         if let Some(item) = self.get_selected_item() {
             if !item.is_dir && !item.is_binary {
-                // Try to read the first few lines of the file
+                // Try to read the entire file
                 match std::fs::read_to_string(&item.path) {
                     Ok(content) => {
-                        // Take first 10 lines or first 500 characters
-                        let preview: String = content
-                            .lines()
-                            .take(10)
-                            .collect::<Vec<&str>>()
-                            .join("\n");
-
-                        // Limit to 500 chars if longer
-                        let preview = if preview.len() > 500 {
-                            preview.chars().take(500).collect::<String>() + "..."
-                        } else {
-                            preview
-                        };
-
-                        self.preview_content = Some(preview);
+                        self.preview_content = Some(content);
                     }
                     Err(_) => {
                         self.preview_content = Some("(Unable to read file)".to_string());
