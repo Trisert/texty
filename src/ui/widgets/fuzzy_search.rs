@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 use crate::fuzzy_search::FuzzySearchState;
 
@@ -43,14 +43,14 @@ impl<'a> FuzzySearchWidget<'a> {
 
 impl<'a> Widget for FuzzySearchWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Clear the area
-        Clear.render(area, buf);
-
-        // Create the main block
+        // Create the main block with dark purple background
         let block = Block::default()
             .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Rgb(255, 102, 0))) // Orange border
+            .style(Style::default().bg(Color::Rgb(42, 26, 62))) // Dark purple background
             .title("Fuzzy Search")
-            .title_alignment(Alignment::Center);
+            .title_alignment(Alignment::Center)
+            .title_style(Style::default().fg(Color::White));
 
         // Split the area: search input + results list
         let chunks = Layout::default()
@@ -72,7 +72,7 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         let search_text = format!("> {}", self.state.query);
         let search_paragraph = Paragraph::new(search_text)
             .block(search_block)
-            .style(Style::default().fg(Color::White));
+            .style(Style::default().fg(Color::Rgb(224, 224, 224))); // Light gray #e0e0e0
 
         search_paragraph.render(chunks[0], buf);
 
@@ -99,13 +99,13 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             ];
 
             if item.is_hidden {
-                spans.push(Span::styled(" (hidden)", Style::default().fg(Color::Gray)));
+                spans.push(Span::styled(" (hidden)", Style::default().fg(Color::Rgb(128, 128, 128)))); // Darker gray
             }
 
             let style = if is_selected {
-                Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD)
+                Style::default().bg(Color::Rgb(255, 102, 0)).fg(Color::White).add_modifier(Modifier::BOLD) // Orange highlight
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Color::Rgb(224, 224, 224)) // Light gray text
             };
 
             result_lines.push(Line::from(spans).style(style));
@@ -117,7 +117,7 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             let count_text = format!("{} items", self.state.filtered_items.len());
             result_lines.push(Line::from(vec![Span::styled(
                 count_text,
-                Style::default().fg(Color::Gray),
+                Style::default().fg(Color::Rgb(160, 160, 160)), // Medium gray
             )]));
         }
 
