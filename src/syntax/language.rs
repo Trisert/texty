@@ -1,4 +1,4 @@
-use crate::syntax::{LanguageConfig, LanguageId};
+use crate::syntax::{LanguageConfig, LanguageId, LanguageRegistry};
 
 pub fn get_language_config(id: LanguageId) -> LanguageConfig {
     match id {
@@ -37,6 +37,35 @@ pub fn get_language_config_by_extension(ext: &str) -> Option<LanguageConfig> {
         "ts" => Some(get_language_config(LanguageId::TypeScript)),
         _ => None,
     }
+}
+
+/// Get language config from runtime registry
+pub fn get_language_config_from_registry(registry: &LanguageRegistry, name: &str) -> Option<LanguageConfig> {
+    let entry = registry.get_language_by_name(name)?;
+    let id = match name {
+        "rust" => LanguageId::Rust,
+        "python" => LanguageId::Python,
+        "javascript" => LanguageId::JavaScript,
+        "typescript" => LanguageId::TypeScript,
+        _ => return None,
+    };
+
+    Some(LanguageConfig {
+        id,
+        tree_sitter_language: match id {
+            LanguageId::Rust => || tree_sitter_rust::language(),
+            LanguageId::Python => || tree_sitter_python::language(),
+            LanguageId::JavaScript => || tree_sitter_javascript::language(),
+            LanguageId::TypeScript => || tree_sitter_typescript::language_typescript(),
+        },
+        highlight_query_path: entry.highlight_query.clone(),
+        highlight_query_fallback: match id {
+            LanguageId::Rust => include_str!("../../queries/rust/highlights.scm"),
+            LanguageId::Python => include_str!("../../queries/python/highlights.scm"),
+            LanguageId::JavaScript => include_str!("../../queries/javascript/highlights.scm"),
+            LanguageId::TypeScript => include_str!("../../queries/typescript/highlights.scm"),
+        },
+    })
 }
 
 #[cfg(test)]

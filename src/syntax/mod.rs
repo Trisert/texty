@@ -1,8 +1,10 @@
 pub mod cache;
+pub mod config;
 pub mod highlighter;
 pub mod language;
 pub mod query_loader;
 
+pub use config::{load_languages_config, LanguageRegistry};
 pub use highlighter::{HighlightKind, HighlightToken, SyntaxHighlighter};
 pub use language::get_language_config;
 pub use query_loader::QueryLoader;
