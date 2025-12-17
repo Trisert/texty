@@ -16,26 +16,12 @@ impl<'a> FuzzySearchWidget<'a> {
         Self { state }
     }
 
-    pub fn calculate_position(terminal_width: u16, terminal_height: u16) -> Rect {
+    pub fn calculate_width(terminal_width: u16) -> u16 {
         // Use 35% of terminal width for sidebar-like layout
-        let width = ((terminal_width as f32 * 0.35) as u16)
+        ((terminal_width as f32 * 0.35) as u16)
             .max(40)
             .min(80)
-            .min(terminal_width.saturating_sub(4));
-
-        // Use full height minus small margin
-        let height = terminal_height.saturating_sub(2);
-        let y = 1; // Small top margin
-
-        // Left-aligned (not centered)
-        let x = 0;
-
-        Rect {
-            x,
-            y,
-            width,
-            height,
-        }
+            .min(terminal_width.saturating_sub(4))
     }
 }
 

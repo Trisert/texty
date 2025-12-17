@@ -43,6 +43,31 @@ impl TuiRenderer {
         self.terminal.draw(|f| {
             let size = f.size();
 
+            // Check if fuzzy search is active
+            let fuzzy_search_active = editor.fuzzy_search.is_some();
+
+            let editor_area = if fuzzy_search_active {
+                // Split screen: fuzzy search (left) + editor (right)
+                let fuzzy_width = FuzzySearchWidget::calculate_width(size.width);
+                let main_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Length(fuzzy_width), // Fuzzy search width
+                        Constraint::Min(1), // Editor area
+                    ])
+                    .split(size);
+
+                // Render fuzzy search in left panel
+                if let Some(fuzzy_state) = &editor.fuzzy_search {
+                    let fuzzy_widget = FuzzySearchWidget::new(fuzzy_state);
+                    f.render_widget(fuzzy_widget, main_chunks[0]);
+                }
+
+                main_chunks[1] // Editor gets the right panel
+            } else {
+                size // Editor gets full screen when no fuzzy search
+            };
+
             // Create main layout: editor area + status bar
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -50,7 +75,7 @@ impl TuiRenderer {
                     Constraint::Min(1),    // Editor area
                     Constraint::Length(1), // Status bar (1 line)
                 ])
-                .split(size);
+                .split(editor_area);
 
             // Split editor area: gutter + text
             let editor_chunks = Layout::default()
@@ -133,12 +158,7 @@ impl TuiRenderer {
                 f.render_widget(menu, menu_area);
             }
 
-            // Render fuzzy search if active
-            if let Some(fuzzy_state) = &editor.fuzzy_search {
-                let fuzzy_widget = FuzzySearchWidget::new(fuzzy_state);
-                let fuzzy_area = FuzzySearchWidget::calculate_position(size.width, size.height);
-                f.render_widget(fuzzy_widget, fuzzy_area);
-            }
+
         })?;
         Ok(())
     }
