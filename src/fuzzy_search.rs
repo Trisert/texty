@@ -25,6 +25,7 @@ pub struct FuzzySearchState {
     pub scroll_offset: usize,
     pub is_scanning: bool,
     pub preview_content: Option<String>,
+    pub preview_highlights: Vec<(usize, usize, String)>, // (start, end, highlight_type)
 }
 
 impl Default for FuzzySearchState {
@@ -38,6 +39,7 @@ impl Default for FuzzySearchState {
             scroll_offset: 0,
             is_scanning: false,
             preview_content: None,
+            preview_highlights: Vec::new(),
         }
     }
 }

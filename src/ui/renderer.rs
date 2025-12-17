@@ -74,6 +74,7 @@ impl TuiRenderer {
                 // Show file preview in content area with editor-like UI
                 if let Some(fuzzy_state) = &editor.fuzzy_search {
                     if let Some(preview_text) = &fuzzy_state.preview_content {
+
                         // Split preview area: gutter + text + status bar
                         let vertical_chunks = Layout::default()
                             .direction(Direction::Vertical)
@@ -101,7 +102,7 @@ impl TuiRenderer {
                         let gutter_paragraph = Paragraph::new(gutter_lines);
                         f.render_widget(gutter_paragraph, preview_chunks[0]);
 
-                        // Render preview text
+                        // Render preview text (syntax highlighting for preview is complex, using plain text for now)
                         let preview_paragraph = Paragraph::new(preview_text.clone())
                             .wrap(ratatui::widgets::Wrap { trim: true });
                         f.render_widget(preview_paragraph, preview_chunks[1]);
@@ -242,3 +243,6 @@ impl TuiRenderer {
         Ok(())
     }
 }
+
+// TODO: Implement syntax highlighting for preview
+// For now, preview shows plain text but full content
