@@ -82,16 +82,6 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
 
         let mut result_lines = Vec::new();
 
-        // Show current path
-        let path_display = format!("{}", self.state.current_path.display());
-        result_lines.push(Line::from(vec![Span::styled(
-            path_display,
-            Style::default().fg(Color::Cyan),
-        )]));
-
-        // Empty line
-        result_lines.push(Line::from(""));
-
         // Show filtered results (up to 10 items)
         let start_idx = self.state.scroll_offset;
         let end_idx = (start_idx + 10).min(self.state.filtered_items.len());
@@ -100,16 +90,12 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             let global_idx = start_idx + i;
             let is_selected = global_idx == self.state.selected_index;
 
-            let prefix = if item.is_dir { "[DIR] " } else { "[FILE] " };
-            let name = if item.name == ".." {
-                ".. (parent)".to_string()
-            } else {
-                item.name.clone()
-            };
+            let prefix = if item.is_dir { "📁 " } else { "📄 " };
+            let display_path = item.path.display().to_string();
 
             let mut spans = vec![
                 Span::styled(prefix, Style::default().fg(Color::Yellow)),
-                Span::raw(name),
+                Span::raw(display_path),
             ];
 
             if item.is_hidden {
