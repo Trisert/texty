@@ -85,11 +85,29 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             let global_idx = start_idx + i;
             let is_selected = global_idx == self.state.selected_index;
 
-            let display_name = item.name.clone();
-            let mut spans = vec![Span::raw(display_name)];
+            let full_path = item.path.display().to_string();
+            let mut spans = Vec::new();
+
+            // For files, show path in gray and filename in white
+            if !item.is_dir {
+                // Find the last path separator
+                if let Some(last_sep) = full_path.rfind('/') {
+                    let path_part = &full_path[..last_sep + 1]; // Include the /
+                    let file_part = &full_path[last_sep + 1..];
+
+                    spans.push(Span::styled(path_part.to_string(), Style::default().fg(Color::Gray)));
+                    spans.push(Span::styled(file_part.to_string(), Style::default().fg(Color::White)));
+                } else {
+                    // No path separator, just show the filename
+                    spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+                }
+            } else {
+                // For directories, show the full path in white
+                spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+            }
 
             if item.is_hidden {
-                spans.push(Span::styled(" (hidden)", Style::default().fg(Color::Gray)));
+                spans.push(Span::styled(" (hidden)", Style::default().fg(Color::DarkGray)));
             }
 
             let style = if is_selected {
