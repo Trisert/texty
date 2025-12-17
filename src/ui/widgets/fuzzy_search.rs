@@ -18,7 +18,7 @@ impl<'a> FuzzySearchWidget<'a> {
 
     pub fn calculate_position(terminal_width: u16, terminal_height: u16) -> Rect {
         let width = 60.min(terminal_width.saturating_sub(4));
-        let height = 12.min(terminal_height.saturating_sub(4));
+        let height = 16.min(terminal_height.saturating_sub(4)); // Increased for 10 items + header/footer
 
         let x = (terminal_width - width) / 2;
         let y = (terminal_height - height) / 2;
@@ -83,9 +83,9 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         // Empty line
         result_lines.push(Line::from(""));
 
-        // Show filtered results (up to 8 items)
+        // Show filtered results (up to 10 items)
         let start_idx = self.state.scroll_offset;
-        let end_idx = (start_idx + 8).min(self.state.filtered_items.len());
+        let end_idx = (start_idx + 10).min(self.state.filtered_items.len());
 
         for (i, item) in self.state.filtered_items[start_idx..end_idx].iter().enumerate() {
             let global_idx = start_idx + i;
