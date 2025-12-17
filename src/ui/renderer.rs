@@ -5,6 +5,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
+    text::Line,
     widgets::Paragraph,
 };
 use std::io::Stdout;
@@ -70,12 +71,58 @@ impl TuiRenderer {
             };
 
             if fuzzy_search_active {
-                // Show file preview in content area
+                // Show file preview in content area with editor-like UI
                 if let Some(fuzzy_state) = &editor.fuzzy_search {
                     if let Some(preview_text) = &fuzzy_state.preview_content {
+                        // Split preview area: gutter + text + status bar
+                        let vertical_chunks = Layout::default()
+                            .direction(Direction::Vertical)
+                            .constraints([
+                                Constraint::Min(1),    // Preview content
+                                Constraint::Length(1), // Status bar
+                            ])
+                            .split(content_area);
+
+                        let preview_chunks = Layout::default()
+                            .direction(Direction::Horizontal)
+                            .constraints([
+                                Constraint::Length(4), // Gutter
+                                Constraint::Min(1),    // Text area
+                            ])
+                            .split(vertical_chunks[0]);
+
+                        // Render gutter with line numbers
+                        let line_count = preview_text.lines().count();
+                        let mut gutter_lines = Vec::new();
+                        for i in 0..line_count {
+                            gutter_lines.push(Line::from(format!("{:3} ", i + 1))
+                                .style(Style::default().fg(Color::DarkGray)));
+                        }
+                        let gutter_paragraph = Paragraph::new(gutter_lines);
+                        f.render_widget(gutter_paragraph, preview_chunks[0]);
+
+                        // Render preview text
                         let preview_paragraph = Paragraph::new(preview_text.clone())
                             .wrap(ratatui::widgets::Wrap { trim: true });
-                        f.render_widget(preview_paragraph, content_area);
+                        f.render_widget(preview_paragraph, preview_chunks[1]);
+
+                        // Render status bar for preview
+                        let status_text = if let Some(item) = fuzzy_state.get_selected_item() {
+                            format!("Preview: {}", item.path.display())
+                        } else {
+                            "Preview".to_string()
+                        };
+                        let status_line = ratatui::text::Line::from(status_text).style(
+                            Style::default()
+                                .bg(self.theme.ui.status_bar_bg)
+                                .fg(self.theme.ui.status_bar_fg),
+                        );
+                        f.buffer_mut().set_line(
+                            content_area.x,
+                            vertical_chunks[1].y,
+                            &status_line,
+                            content_area.width,
+                        );
                     } else {
                         let placeholder = Paragraph::new("Select a file to preview")
                             .style(Style::default().fg(Color::Gray));
