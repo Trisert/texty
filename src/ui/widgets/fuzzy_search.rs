@@ -1,6 +1,6 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
@@ -43,14 +43,9 @@ impl<'a> FuzzySearchWidget<'a> {
 
 impl<'a> Widget for FuzzySearchWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Create the main block with dark purple background
+        // Create the main block with minimal styling
         let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Rgb(255, 102, 0))) // Orange border
-            .style(Style::default().bg(Color::Rgb(42, 26, 62))) // Dark purple background
-            .title("Fuzzy Search")
-            .title_alignment(Alignment::Center)
-            .title_style(Style::default().fg(Color::White));
+            .style(Style::default().bg(Color::Black));
 
         // Split the area: search input + results list
         let chunks = Layout::default()
@@ -72,7 +67,7 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         let search_text = format!("> {}", self.state.query);
         let search_paragraph = Paragraph::new(search_text)
             .block(search_block)
-            .style(Style::default().fg(Color::Rgb(224, 224, 224))); // Light gray #e0e0e0
+            .style(Style::default().fg(Color::White));
 
         search_paragraph.render(chunks[0], buf);
 
@@ -90,36 +85,23 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             let global_idx = start_idx + i;
             let is_selected = global_idx == self.state.selected_index;
 
-            let prefix = if item.is_dir { "📁 " } else { "📄 " };
-            let display_path = item.path.display().to_string();
-
-            let mut spans = vec![
-                Span::styled(prefix, Style::default().fg(Color::Yellow)),
-                Span::raw(display_path),
-            ];
+            let display_name = item.name.clone();
+            let mut spans = vec![Span::raw(display_name)];
 
             if item.is_hidden {
-                spans.push(Span::styled(" (hidden)", Style::default().fg(Color::Rgb(128, 128, 128)))); // Darker gray
+                spans.push(Span::styled(" (hidden)", Style::default().fg(Color::Gray)));
             }
 
             let style = if is_selected {
-                Style::default().bg(Color::Rgb(255, 102, 0)).fg(Color::White).add_modifier(Modifier::BOLD) // Orange highlight
+                Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Rgb(224, 224, 224)) // Light gray text
+                Style::default().fg(Color::White)
             };
 
             result_lines.push(Line::from(spans).style(style));
         }
 
-        // Show item count
-        if !self.state.filtered_items.is_empty() {
-            result_lines.push(Line::from(""));
-            let count_text = format!("{} items", self.state.filtered_items.len());
-            result_lines.push(Line::from(vec![Span::styled(
-                count_text,
-                Style::default().fg(Color::Rgb(160, 160, 160)), // Medium gray
-            )]));
-        }
+        // Minimalistic: no item count
 
         let results_paragraph = Paragraph::new(result_lines)
             .block(results_block)
