@@ -3,8 +3,9 @@
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
-    style::Style,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    widgets::Paragraph,
 };
 use std::io::Stdout;
 
@@ -46,14 +47,14 @@ impl TuiRenderer {
             // Check if fuzzy search is active
             let fuzzy_search_active = editor.fuzzy_search.is_some();
 
-            let editor_area = if fuzzy_search_active {
-                // Split screen: fuzzy search (left) + editor (right)
+            let (fuzzy_area, content_area) = if fuzzy_search_active {
+                // Split screen: fuzzy search (left) + content (right)
                 let fuzzy_width = FuzzySearchWidget::calculate_width(size.width);
                 let main_chunks = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([
                         Constraint::Length(fuzzy_width), // Fuzzy search width
-                        Constraint::Min(1), // Editor area
+                        Constraint::Min(1), // Content area (preview or editor)
                     ])
                     .split(size);
 
@@ -63,57 +64,82 @@ impl TuiRenderer {
                     f.render_widget(fuzzy_widget, main_chunks[0]);
                 }
 
-                main_chunks[1] // Editor gets the right panel
+                (Some(main_chunks[0]), main_chunks[1]) // Return both areas
             } else {
-                size // Editor gets full screen when no fuzzy search
+                (None, size) // No fuzzy area, content gets full screen
             };
 
-            // Create main layout: editor area + status bar
-            let vertical_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(1),    // Editor area
-                    Constraint::Length(1), // Status bar (1 line)
-                ])
-                .split(editor_area);
+            if fuzzy_search_active {
+                // Show file preview in content area
+                if let Some(fuzzy_state) = &editor.fuzzy_search {
+                    if let Some(preview_text) = &fuzzy_state.preview_content {
+                        let preview_paragraph = Paragraph::new(preview_text.clone())
+                            .wrap(ratatui::widgets::Wrap { trim: true });
+                        f.render_widget(preview_paragraph, content_area);
+                    } else {
+                        let placeholder = Paragraph::new("Select a file to preview")
+                            .style(Style::default().fg(Color::Gray));
+                        f.render_widget(placeholder, content_area);
+                    }
+                }
+            } else {
+                // Show editor in content area
+                // Create main layout: editor area + status bar
+                let vertical_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Min(1),    // Editor area
+                        Constraint::Length(1), // Status bar (1 line)
+                    ])
+                    .split(content_area);
 
-            // Split editor area: gutter + text
-            let editor_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Length(4), // Gutter
-                    Constraint::Min(1),    // Text area
-                ])
-                .split(vertical_chunks[0]);
+                // Split editor area: gutter + text
+                let editor_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Length(4), // Gutter
+                        Constraint::Min(1),    // Text area
+                    ])
+                    .split(vertical_chunks[0]);
 
-            // Render gutter
-            f.render_widget(Gutter::new(editor, &self.theme), editor_chunks[0]);
+                // Render gutter
+                f.render_widget(Gutter::new(editor, &self.theme), editor_chunks[0]);
 
-            // Render editor pane
-            f.render_widget(EditorPane::new(editor, &self.theme), editor_chunks[1]);
+                // Render editor pane
+                f.render_widget(EditorPane::new(editor, &self.theme), editor_chunks[1]);
 
-            // Set cursor
-            let cursor_row = editor
-                .cursor
-                .line
-                .saturating_sub(editor.viewport.offset_line) as u16;
-            let cursor_col = editor.cursor.col.saturating_sub(editor.viewport.offset_col) as u16;
-            if cursor_row < editor_chunks[1].height && cursor_col < editor_chunks[1].width {
-                f.set_cursor(
-                    editor_chunks[1].x + cursor_col,
-                    editor_chunks[1].y + cursor_row,
-                );
+                // Set cursor (only when editor is visible and not in fuzzy search mode)
+                if !fuzzy_search_active {
+                    let cursor_row = editor
+                        .cursor
+                        .line
+                        .saturating_sub(editor.viewport.offset_line) as u16;
+                    let cursor_col = editor.cursor.col.saturating_sub(editor.viewport.offset_col) as u16;
+                    if cursor_row < editor_chunks[1].height && cursor_col < editor_chunks[1].width {
+                        f.set_cursor(
+                            editor_chunks[1].x + cursor_col,
+                            editor_chunks[1].y + cursor_row,
+                        );
+                    }
+                }
             }
 
-            // Render status bar or command line
+            // Render status bar at the bottom of the terminal
+            let status_bar_area = Rect {
+                x: 0,
+                y: size.height - 1,
+                width: size.width,
+                height: 1,
+            };
+
             if editor.mode == crate::mode::Mode::Command {
                 // Show command line on status bar line, filling full width
                 let command_text = editor.get_command_line_display();
-                let padded_command = if command_text.len() < vertical_chunks[1].width as usize {
+                let padded_command = if command_text.len() < status_bar_area.width as usize {
                     format!(
                         "{}{}",
                         command_text,
-                        " ".repeat(vertical_chunks[1].width as usize - command_text.len())
+                        " ".repeat(status_bar_area.width as usize - command_text.len())
                     )
                 } else {
                     command_text
@@ -125,23 +151,29 @@ impl TuiRenderer {
                 );
                 f.buffer_mut().set_line(
                     0,
-                    vertical_chunks[1].y,
+                    status_bar_area.y,
                     &command_line,
-                    vertical_chunks[1].width,
+                    status_bar_area.width,
                 );
             } else {
                 // Show normal status bar
-                f.render_widget(StatusBar::new(editor, &self.theme), vertical_chunks[1]);
+                f.render_widget(StatusBar::new(editor, &self.theme), status_bar_area);
             }
 
             // Render overlays (floating windows)
-            let cursor_x = editor_chunks[1].x
-                + editor.cursor.col.saturating_sub(editor.viewport.offset_col) as u16;
-            let cursor_y = editor_chunks[1].y
-                + editor
-                    .cursor
-                    .line
-                    .saturating_sub(editor.viewport.offset_line) as u16;
+            // Calculate cursor position relative to content area
+            let (cursor_x, cursor_y) = if fuzzy_search_active {
+                // When fuzzy search is active, cursor is not visible, use center of content area
+                (
+                    content_area.x + content_area.width / 2,
+                    content_area.y + content_area.height / 2,
+                )
+            } else {
+                (
+                    content_area.x + 4 + editor.cursor.col.saturating_sub(editor.viewport.offset_col) as u16, // +4 for gutter
+                    content_area.y + editor.cursor.line.saturating_sub(editor.viewport.offset_line) as u16,
+                )
+            };
 
             // Render hover window if active
             if let Some(content) = &editor.hover_content {

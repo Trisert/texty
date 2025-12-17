@@ -31,26 +31,14 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         let block = Block::default()
             .style(Style::default().bg(Color::Black));
 
-        // Split the area: search input + (file list + preview)
+        // Split the area: search input + file list
         let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3), // Search input area
-                Constraint::Min(1),    // File list + preview area
+                Constraint::Min(1),    // File list area
             ])
             .split(block.inner(area));
-
-        // Split the bottom area: file list + preview
-        let horizontal_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(50), // File list
-                Constraint::Percentage(50), // Preview
-            ])
-            .split(vertical_chunks[1]);
-
-        // Render the block
-        block.render(area, buf);
 
         // Search input area
         let search_block = Block::default()
@@ -64,7 +52,7 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
 
         search_paragraph.render(vertical_chunks[0], buf);
 
-        // File list (left side)
+        // File list
         let file_list_block = Block::default()
             .borders(Borders::NONE)
             .title("Files");
@@ -117,18 +105,6 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             .block(file_list_block)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
-        file_list_paragraph.render(horizontal_chunks[0], buf);
-
-        // Preview pane (right side)
-        let preview_block = Block::default()
-            .borders(Borders::NONE)
-            .title("Preview");
-
-        let preview_text = self.state.preview_content.as_deref().unwrap_or("Select a file to preview");
-        let preview_paragraph = Paragraph::new(preview_text)
-            .block(preview_block)
-            .wrap(ratatui::widgets::Wrap { trim: true });
-
-        preview_paragraph.render(horizontal_chunks[1], buf);
+        file_list_paragraph.render(vertical_chunks[1], buf);
     }
 }
