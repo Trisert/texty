@@ -95,5 +95,6 @@ fn mode_to_str(mode: &crate::mode::Mode) -> &'static str {
         crate::mode::Mode::Insert => "INSERT",
         crate::mode::Mode::Visual => "VISUAL",
         crate::mode::Mode::Command => "COMMAND",
+        crate::mode::Mode::FuzzySearch => "FUZZY",
     }
 }

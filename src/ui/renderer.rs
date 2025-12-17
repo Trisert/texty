@@ -11,6 +11,7 @@ use std::io::Stdout;
 use crate::editor::Editor;
 use crate::ui::theme::Theme;
 use crate::ui::widgets::editor_pane::EditorPane;
+use crate::ui::widgets::fuzzy_search::FuzzySearchWidget;
 use crate::ui::widgets::gutter::Gutter;
 use crate::ui::widgets::hover::HoverWindow;
 use crate::ui::widgets::menu::CodeActionMenu;
@@ -130,6 +131,13 @@ impl TuiRenderer {
                 menu.selected_index = editor.code_action_selected;
                 let menu_area = menu.calculate_position(cursor_x, cursor_y, size);
                 f.render_widget(menu, menu_area);
+            }
+
+            // Render fuzzy search if active
+            if let Some(fuzzy_state) = &editor.fuzzy_search {
+                let fuzzy_widget = FuzzySearchWidget::new(fuzzy_state);
+                let fuzzy_area = FuzzySearchWidget::calculate_position(size.width, size.height);
+                f.render_widget(fuzzy_widget, fuzzy_area);
             }
         })?;
         Ok(())

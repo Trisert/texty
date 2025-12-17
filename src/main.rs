@@ -3,8 +3,12 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use std::env;
+use std::time::{Duration, Instant};
 use texty::ui::renderer::TuiRenderer;
 use texty::{command::Command, editor::Editor, mode::Mode};
+
+// Global state for double space detection
+static mut LAST_SPACE_TIME: Option<Instant> = None;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -103,6 +107,27 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             KeyCode::Char('a') => Some(Command::CodeAction),
             KeyCode::Char('w') => Some(Command::SaveFile),
             KeyCode::Char('q') => Some(Command::Quit),
+            KeyCode::Char(' ') => {
+                // Check for double space
+                let now = Instant::now();
+                let is_double_space = unsafe {
+                    if let Some(last_time) = LAST_SPACE_TIME {
+                        now.duration_since(last_time) < Duration::from_millis(500)
+                    } else {
+                        false
+                    }
+                };
+
+                unsafe {
+                    LAST_SPACE_TIME = Some(now);
+                }
+
+                if is_double_space {
+                    Some(Command::OpenFuzzySearch)
+                } else {
+                    None
+                }
+            }
             _ => None,
         },
         Mode::Insert => match key_event.code {
@@ -115,6 +140,18 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             KeyCode::Right => Some(Command::MoveRight),
             KeyCode::Up => Some(Command::MoveUp),
             KeyCode::Down => Some(Command::MoveDown),
+            _ => None,
+        },
+        Mode::FuzzySearch => match key_event.code {
+            KeyCode::Esc => Some(Command::FuzzySearchCancel),
+            KeyCode::Enter => Some(Command::FuzzySearchSelect),
+            KeyCode::Up | KeyCode::Char('k') => Some(Command::FuzzySearchUp),
+            KeyCode::Down | KeyCode::Char('j') => Some(Command::FuzzySearchDown),
+            KeyCode::Char(c) if c.is_alphanumeric() || c == ' ' || c == '.' || c == '_' || c == '-' => {
+                // Add character to fuzzy search query
+                Some(Command::InsertChar(c))
+            }
+            KeyCode::Backspace => Some(Command::DeleteChar),
             _ => None,
         },
         _ => None,

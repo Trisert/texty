@@ -4,6 +4,7 @@ use crate::buffer::Buffer;
 use crate::command::Command;
 use crate::cursor::Cursor;
 use crate::formatter::external::{Formatter, get_formatter_config};
+use crate::fuzzy_search::FuzzySearchState;
 use crate::lsp::completion::CompletionManager;
 use crate::lsp::diagnostics::DiagnosticManager;
 use crate::lsp::manager::LspManager;
@@ -12,6 +13,7 @@ use crate::mode::Mode;
 use crate::syntax::{LanguageId, LanguageRegistry, load_languages_config};
 use crate::ui::widgets::completion::CompletionPopup;
 use crate::viewport::Viewport;
+use std::path::PathBuf;
 use lsp_types::{Diagnostic, Url};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -32,6 +34,8 @@ pub struct Editor {
     pub progress_manager: Arc<ProgressManager>,
     pub current_language: Option<LanguageId>,
     pub language_registry: LanguageRegistry,
+    // Fuzzy search
+    pub fuzzy_search: Option<FuzzySearchState>,
     // UI overlays
     pub hover_content: Option<Vec<String>>, // Content for hover window
     pub code_actions: Option<Vec<lsp_types::CodeAction>>, // Available code actions
@@ -77,6 +81,7 @@ impl Editor {
             progress_manager: Arc::new(ProgressManager::new()),
             current_language: Some(LanguageId::Rust), // Default to Rust for now
             language_registry,
+            fuzzy_search: None,
             hover_content: None,
             code_actions: None,
             code_action_selected: 0,
@@ -112,28 +117,97 @@ impl Editor {
                 }
             }
             Command::InsertChar(c) => {
-                if c == '\n' {
-                    self.buffer
-                        .insert_char(c, self.cursor.line, self.cursor.col)
-                        .ok();
-                    self.cursor.line += 1;
-                    self.cursor.col = 0;
-                } else {
-                    self.buffer
-                        .insert_char(c, self.cursor.line, self.cursor.col)
-                        .ok();
+                if self.mode == Mode::Insert {
+                    let _ = self.buffer.insert_char(c, self.cursor.line, self.cursor.col);
                     self.cursor.col += 1;
+                    self.notify_text_change();
+                } else if self.mode == Mode::Normal && self.fuzzy_search.is_some() {
+                    // Handle typing in fuzzy search
+                    if let Some(fuzzy) = &mut self.fuzzy_search {
+                        fuzzy.query.push(c);
+                        fuzzy.update_filter();
+                    }
                 }
-                self.notify_text_change();
             }
             Command::DeleteChar => {
-                self.buffer
-                    .delete_char(self.cursor.line, self.cursor.col)
-                    .ok();
-                if self.cursor.col > 0 {
-                    self.cursor.col -= 1;
+                if self.mode == Mode::Insert {
+                    if self.cursor.col > 0 {
+                        let _ = self.buffer.delete_char(self.cursor.line, self.cursor.col - 1);
+                        self.cursor.col -= 1;
+                    }
+                } else if self.mode == Mode::Normal {
+                    if self.fuzzy_search.is_some() {
+                        // Handle backspace in fuzzy search
+                        if let Some(fuzzy) = &mut self.fuzzy_search {
+                            fuzzy.query.pop();
+                            fuzzy.update_filter();
+                        }
+                    } else {
+                        // Backspace in normal mode: delete previous character
+                        if self.cursor.col > 0 {
+                            let _ = self.buffer.delete_char(self.cursor.line, self.cursor.col - 1);
+                            self.cursor.col -= 1;
+                        }
+                    }
                 }
-                self.notify_text_change();
+            }
+            Command::OpenFuzzySearch => {
+                self.open_fuzzy_search();
+            }
+            Command::FuzzySearchUp => {
+                if let Some(fuzzy) = &mut self.fuzzy_search {
+                    fuzzy.select_prev();
+                }
+            }
+            Command::FuzzySearchDown => {
+                if let Some(fuzzy) = &mut self.fuzzy_search {
+                    fuzzy.select_next();
+                }
+            }
+            Command::FuzzySearchSelect => {
+                // Handle directory navigation first
+                let mut should_navigate = false;
+                let mut nav_path = None;
+                if let Some(fuzzy) = &self.fuzzy_search {
+                    if let Some(item) = fuzzy.get_selected_item() {
+                        if item.is_dir {
+                            should_navigate = true;
+                            nav_path = Some(item.path.clone());
+                        }
+                    }
+                }
+
+                if should_navigate {
+                    if let Some(fuzzy) = &mut self.fuzzy_search {
+                        if let Some(path) = nav_path {
+                            fuzzy.navigate_to_directory(path);
+                        }
+                    }
+                } else {
+                    // Handle file opening
+                    let mut should_open = false;
+                    let mut open_path = None;
+                    if let Some(fuzzy) = &self.fuzzy_search {
+                        if let Some(item) = fuzzy.get_selected_item() {
+                            if !item.is_dir {
+                                should_open = true;
+                                open_path = Some(item.path.clone());
+                            }
+                        }
+                    }
+
+                    if should_open {
+                        if let Some(path) = open_path {
+                            self.open_file(&path.to_string_lossy()).ok();
+                            self.fuzzy_search = None;
+                            self.mode = Mode::Normal;
+                        }
+                    }
+                }
+            }
+            Command::FuzzySearchCancel => {
+                self.fuzzy_search = None;
+                self.mode = Mode::Normal;
             }
             Command::InsertMode => self.mode = Mode::Insert,
             Command::NormalMode => self.mode = Mode::Normal,
@@ -229,8 +303,9 @@ impl Editor {
                     // Async LSP operations need proper integration with sync UI
                 }
             }
-            _ => {}
-        }
+
+             _ => {}
+         }
         // Update desired_col
         self.cursor.desired_col = self.cursor.col;
         // Scroll to keep cursor visible
@@ -500,5 +575,17 @@ impl Editor {
         } else {
             String::new()
         }
+    }
+
+    fn open_fuzzy_search(&mut self) {
+        let mut fuzzy_state = FuzzySearchState::new();
+        fuzzy_state.current_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+        // Scan directory and populate items
+        fuzzy_state.all_items = crate::fuzzy_search::scan_directory(&fuzzy_state.current_path);
+        fuzzy_state.update_filter();
+
+        self.fuzzy_search = Some(fuzzy_state);
+        self.mode = Mode::FuzzySearch;
     }
 }

@@ -4,6 +4,7 @@ pub enum Mode {
     Insert,
     Visual,
     Command,
+    FuzzySearch,
 }
 
 #[cfg(test)]
@@ -16,6 +17,7 @@ mod tests {
         assert_ne!(Mode::Normal, Mode::Insert);
         assert_eq!(Mode::Visual, Mode::Visual);
         assert_eq!(Mode::Command, Mode::Command);
+        assert_eq!(Mode::FuzzySearch, Mode::FuzzySearch);
     }
 
     #[test]

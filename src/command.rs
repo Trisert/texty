@@ -23,6 +23,11 @@ pub enum Command {
     Hover,
     WorkspaceSymbols,
     CodeAction,
+    OpenFuzzySearch,
+    FuzzySearchUp,
+    FuzzySearchDown,
+    FuzzySearchSelect,
+    FuzzySearchCancel,
     Quit,
     // Add more as needed
 }

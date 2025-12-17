@@ -2,6 +2,7 @@
 
 pub mod completion;
 pub mod editor_pane;
+pub mod fuzzy_search;
 pub mod gutter;
 pub mod hover;
 pub mod menu;
