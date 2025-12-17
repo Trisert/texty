@@ -1,9 +1,11 @@
 pub mod cache;
 pub mod highlighter;
 pub mod language;
+pub mod query_loader;
 
 pub use highlighter::{HighlightKind, HighlightToken, SyntaxHighlighter};
 pub use language::get_language_config;
+pub use query_loader::QueryLoader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LanguageId {
@@ -17,7 +19,8 @@ pub enum LanguageId {
 pub struct LanguageConfig {
     pub id: LanguageId,
     pub tree_sitter_language: fn() -> tree_sitter::Language,
-    pub highlight_query: &'static str,
+    pub highlight_query_path: Option<String>,
+    pub highlight_query_fallback: &'static str,
 }
 
 #[cfg(test)]

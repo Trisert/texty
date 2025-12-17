@@ -1,0 +1,27 @@
+[[language]]
+name = "rust"
+scope = "source.rust"
+file-types = ["rs"]
+grammar = "rust"
+highlight-query = "runtime/queries/rust/highlights.scm"
+
+[[language]]
+name = "python"
+scope = "source.python"
+file-types = ["py"]
+grammar = "python"
+highlight-query = "runtime/queries/python/highlights.scm"
+
+[[language]]
+name = "javascript"
+scope = "source.js"
+file-types = ["js", "mjs", "cjs"]
+grammar = "javascript"
+highlight-query = "runtime/queries/javascript/highlights.scm"
+
+[[language]]
+name = "typescript"
+scope = "source.ts"
+file-types = ["ts", "tsx"]
+grammar = "typescript"
+highlight-query = "runtime/queries/typescript/highlights.scm"

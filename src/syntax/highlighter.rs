@@ -1,12 +1,13 @@
-use crate::syntax::LanguageConfig;
+use crate::syntax::{LanguageConfig, QueryLoader};
 use std::collections::HashMap;
-use tree_sitter::{Parser, Query, QueryCursor, Tree};
+use tree_sitter::{Parser, Tree};
 
 pub struct SyntaxHighlighter {
     parser: Parser,
     tree: Option<Tree>,
     language_config: LanguageConfig,
     highlights: HashMap<usize, Vec<HighlightToken>>, // line -> tokens
+    query_loader: QueryLoader,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +39,7 @@ impl SyntaxHighlighter {
             tree: None,
             language_config,
             highlights: HashMap::new(),
+            query_loader: QueryLoader::new(),
         })
     }
 
@@ -65,13 +67,14 @@ impl SyntaxHighlighter {
     fn update_highlights(&mut self, text: &str) {
         self.highlights.clear();
         if let Some(tree) = &self.tree {
-            let query = Query::new(
-                (self.language_config.tree_sitter_language)(),
-                self.language_config.highlight_query,
-            )
-            .unwrap();
-            let mut cursor = QueryCursor::new();
-            let captures = cursor.captures(&query, tree.root_node(), text.as_bytes());
+            let language = (self.language_config.tree_sitter_language)();
+            let query = self.query_loader.load_query(
+                language,
+                self.language_config.highlight_query_path.as_deref().unwrap_or(""),
+                Some(self.language_config.highlight_query_fallback),
+            ).unwrap();
+            let mut cursor = tree_sitter::QueryCursor::new();
+            let captures = cursor.captures(query, tree.root_node(), text.as_bytes());
 
             for (mat, _) in captures {
                 for capture in mat.captures {
