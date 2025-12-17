@@ -588,8 +588,7 @@ impl Editor {
         fuzzy_state.current_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
         // Scan directory and populate items
-        fuzzy_state.all_items = crate::fuzzy_search::scan_directory(&fuzzy_state.current_path);
-        fuzzy_state.update_filter();
+        fuzzy_state.rescan_current_directory();
 
         self.fuzzy_search = Some(fuzzy_state);
         self.mode = Mode::FuzzySearch;

@@ -103,7 +103,11 @@ impl FuzzySearchState {
     pub fn navigate_to_directory(&mut self, path: PathBuf) {
         self.current_path = path;
         self.query.clear();
-        // TODO: Rescan directory
+        self.rescan_current_directory();
+    }
+
+    pub fn rescan_current_directory(&mut self) {
+        self.all_items = scan_directory(&self.current_path);
         self.update_filter();
     }
 }
