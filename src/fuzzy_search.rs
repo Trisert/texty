@@ -158,11 +158,11 @@ pub fn scan_directory(path: &PathBuf) -> Vec<FileItem> {
         }
     }
 
-    // Sort: directories first, then files, both alphabetically
+    // Sort: files first, then directories, both alphabetically
     items.sort_by(|a, b| {
         match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
+            (true, false) => std::cmp::Ordering::Greater,  // files before directories
+            (false, true) => std::cmp::Ordering::Less,
             _ => a.name.cmp(&b.name),
         }
     });
