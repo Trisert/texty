@@ -171,43 +171,21 @@ impl Editor {
                 }
             }
             Command::FuzzySearchSelect => {
-                // Handle directory navigation first
-                let mut should_navigate = false;
-                let mut nav_path = None;
-                if let Some(fuzzy) = &self.fuzzy_search {
-                    if let Some(item) = fuzzy.get_selected_item() {
-                        if item.is_dir {
-                            should_navigate = true;
-                            nav_path = Some(item.path.clone());
-                        }
-                    }
-                }
+                // Extract selected item info first to avoid borrow conflicts
+                let selected_item = self.fuzzy_search.as_ref()
+                    .and_then(|f| f.get_selected_item())
+                    .cloned();
 
-                if should_navigate {
-                    if let Some(fuzzy) = &mut self.fuzzy_search {
-                        if let Some(path) = nav_path {
-                            fuzzy.navigate_to_directory(path);
+                if let Some(item) = selected_item {
+                    if item.is_dir {
+                        // Navigate to directory
+                        if let Some(fuzzy) = &mut self.fuzzy_search {
+                            fuzzy.navigate_to_directory(item.path);
                         }
-                    }
-                } else {
-                    // Handle file opening
-                    let mut should_open = false;
-                    let mut open_path = None;
-                    if let Some(fuzzy) = &self.fuzzy_search {
-                        if let Some(item) = fuzzy.get_selected_item() {
-                            if !item.is_dir {
-                                should_open = true;
-                                open_path = Some(item.path.clone());
-                            }
-                        }
-                    }
-
-                    if should_open {
-                        if let Some(path) = open_path {
-                            self.open_file(&path.to_string_lossy()).ok();
-                            self.fuzzy_search = None;
-                            self.mode = Mode::Normal;
-                        }
+                    } else {
+                        // Open file in editor pane, keep fuzzy search sidebar open
+                        self.open_file(&item.path.to_string_lossy()).ok();
+                        // Fuzzy search remains active for continued browsing
                     }
                 }
             }
