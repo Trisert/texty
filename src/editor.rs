@@ -121,7 +121,7 @@ impl Editor {
                     let _ = self.buffer.insert_char(c, self.cursor.line, self.cursor.col);
                     self.cursor.col += 1;
                     self.notify_text_change();
-                } else if self.mode == Mode::Normal && self.fuzzy_search.is_some() {
+                } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch) && self.fuzzy_search.is_some() {
                     // Handle typing in fuzzy search
                     if let Some(fuzzy) = &mut self.fuzzy_search {
                         fuzzy.query.push(c);
@@ -148,6 +148,12 @@ impl Editor {
                             let _ = self.buffer.delete_char(self.cursor.line, self.cursor.col - 1);
                             self.cursor.col -= 1;
                         }
+                    }
+                } else if self.mode == Mode::FuzzySearch && self.fuzzy_search.is_some() {
+                    // Handle backspace in fuzzy search mode
+                    if let Some(fuzzy) = &mut self.fuzzy_search {
+                        fuzzy.query.pop();
+                        fuzzy.update_filter();
                     }
                 }
             }
