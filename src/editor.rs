@@ -177,12 +177,22 @@ impl Editor {
             }
             Command::FuzzySearchUp => {
                 if let Some(fuzzy) = &mut self.fuzzy_search {
-                    fuzzy.select_prev();
+                    if let Some(item) = fuzzy.select_prev() {
+                        // Auto-open file when navigating with arrow keys
+                        if !item.is_dir {
+                            self.open_file(&item.path.to_string_lossy()).ok();
+                        }
+                    }
                 }
             }
             Command::FuzzySearchDown => {
                 if let Some(fuzzy) = &mut self.fuzzy_search {
-                    fuzzy.select_next();
+                    if let Some(item) = fuzzy.select_next() {
+                        // Auto-open file when navigating with arrow keys
+                        if !item.is_dir {
+                            self.open_file(&item.path.to_string_lossy()).ok();
+                        }
+                    }
                 }
             }
             Command::FuzzySearchSelect => {
@@ -200,9 +210,10 @@ impl Editor {
                             fuzzy.navigate_to_directory(item.path);
                         }
                     } else {
-                        // Open file in editor pane, keep fuzzy search sidebar open
+                        // Open file full-screen and close fuzzy search (Enter key behavior)
                         self.open_file(&item.path.to_string_lossy()).ok();
-                        // Fuzzy search remains active for continued browsing
+                        self.fuzzy_search = None; // Close fuzzy search
+                        self.mode = Mode::Normal; // Return to normal mode
                     }
                 }
             }

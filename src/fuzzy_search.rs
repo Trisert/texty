@@ -64,15 +64,23 @@ impl FuzzySearchState {
         }
     }
 
-    pub fn select_next(&mut self) {
+    pub fn select_next(&mut self) -> Option<FileItem> {
         if self.selected_index < self.filtered_items.len().saturating_sub(1) {
             self.selected_index += 1;
+            // Auto-open the selected file when navigating with arrow keys
+            self.get_selected_item().cloned()
+        } else {
+            None
         }
     }
 
-    pub fn select_prev(&mut self) {
+    pub fn select_prev(&mut self) -> Option<FileItem> {
         if self.selected_index > 0 {
             self.selected_index = self.selected_index.saturating_sub(1);
+            // Auto-open the selected file when navigating with arrow keys
+            self.get_selected_item().cloned()
+        } else {
+            None
         }
     }
 
