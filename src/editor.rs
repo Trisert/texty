@@ -177,21 +177,23 @@ impl Editor {
             }
             Command::FuzzySearchUp => {
                 if let Some(fuzzy) = &mut self.fuzzy_search
-                    && let Some(item) = fuzzy.select_prev() {
-                        // Auto-open file when navigating with arrow keys
-                        if !item.is_dir {
-                            self.open_file(&item.path.to_string_lossy()).ok();
-                        }
+                    && let Some(item) = fuzzy.select_prev()
+                {
+                    // Auto-open file when navigating with arrow keys
+                    if !item.is_dir {
+                        self.open_file(&item.path.to_string_lossy()).ok();
                     }
+                }
             }
             Command::FuzzySearchDown => {
                 if let Some(fuzzy) = &mut self.fuzzy_search
-                    && let Some(item) = fuzzy.select_next() {
-                        // Auto-open file when navigating with arrow keys
-                        if !item.is_dir {
-                            self.open_file(&item.path.to_string_lossy()).ok();
-                        }
+                    && let Some(item) = fuzzy.select_next()
+                {
+                    // Auto-open file when navigating with arrow keys
+                    if !item.is_dir {
+                        self.open_file(&item.path.to_string_lossy()).ok();
                     }
+                }
             }
             Command::FuzzySearchSelect => {
                 // Extract selected item info first to avoid borrow conflicts
@@ -605,7 +607,6 @@ impl Editor {
 
         // Scan directory and populate items
         fuzzy_state.rescan_current_directory();
-
 
         self.fuzzy_search = Some(fuzzy_state);
         self.mode = Mode::FuzzySearch;

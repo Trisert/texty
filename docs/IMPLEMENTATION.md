@@ -16,6 +16,8 @@ src/
 ├── mode.rs          # Editing modes
 ├── command.rs       # Command system
 ├── keymap.rs        # Keybinding management
+├── fuzzy_search.rs  # Fuzzy file search functionality
+├── formatter/       # External code formatting
 ├── syntax/          # Syntax highlighting
 ├── lsp/             # Language Server Protocol
 ├── ui/              # Terminal UI
@@ -53,6 +55,21 @@ Orchestrates all editor components and manages application state.
 - LSP coordination
 - UI rendering
 
+### Fuzzy Search (`fuzzy_search.rs`)
+Provides fuzzy file search functionality for quick file navigation.
+
+**Features:**
+- Directory traversal
+- Fuzzy matching on filenames
+- File/directory distinction
+- Integration with editor file opening
+
+### Formatter (`formatter/`)
+Handles external code formatting tools.
+
+**Modules:**
+- `external.rs` - Integration with formatters like rustfmt
+
 ### Syntax Highlighting (`syntax/`)
 Tree-sitter based syntax analysis with theme support.
 
@@ -88,9 +105,14 @@ ui/
 ├── renderer.rs       # Main rendering loop
 ├── theme.rs          # UI theming
 └── widgets/          # UI components
-    ├── editor_pane.rs
-    ├── status_bar.rs
-    └── completion.rs
+    ├── completion.rs     # Auto-completion popup
+    ├── editor_pane.rs    # Main text editing area
+    ├── fuzzy_search.rs   # Fuzzy file search interface
+    ├── gutter.rs         # Line numbers and markers
+    ├── hover.rs          # Hover information popup
+    ├── menu.rs           # General menu components
+    ├── preview.rs        # File preview (currently disabled)
+    └── status_bar.rs     # Status line with mode/file info
 ```
 
 ## Design Decisions

@@ -6,7 +6,6 @@ use tempfile::TempDir;
 use texty::command::Command;
 use texty::editor::Editor;
 
-
 #[test]
 fn test_load_edit_save_file() {
     // Create a temporary file with initial content
@@ -400,7 +399,7 @@ fn test_fuzzy_search_formatted_preview() {
     // This test verifies that the basic fuzzy search functionality works
     assert_eq!(fuzzy_state.filtered_items.len(), 1);
     assert_eq!(fuzzy_state.selected_index, 0);
-    
+
     println!("✅ Fuzzy search working correctly (preview removed)");
 }
 

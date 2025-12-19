@@ -55,8 +55,8 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
             ])
             .split(inner_area);
 
-            self.render_search_input(vertical_chunks[0], buf);
-            self.render_file_list(vertical_chunks[1], buf);
+        self.render_search_input(vertical_chunks[0], buf);
+        self.render_file_list(vertical_chunks[1], buf);
     }
 }
 
@@ -172,6 +172,4 @@ impl<'a> FuzzySearchWidget<'a> {
 
         file_list_paragraph.render(file_list_area, buf);
     }
-
-
 }

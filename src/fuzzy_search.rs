@@ -1,4 +1,3 @@
-
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -98,13 +97,6 @@ impl FuzzySearchState {
         self.all_items = scan_directory(&self.current_path);
         self.update_filter();
     }
-
-
-
-
-
-
-
 }
 
 /// Scan a directory and return all files and directories

@@ -47,11 +47,7 @@ impl TuiRenderer {
             let fuzzy_search_active = editor.fuzzy_search.is_some();
 
             let (_fuzzy_area, content_area) = if fuzzy_search_active {
-                let show_preview = editor
-                    .fuzzy_search
-                    .as_ref()
-                    .map(|_| false)
-                    .unwrap_or(false);
+                let show_preview = editor.fuzzy_search.as_ref().map(|_| false).unwrap_or(false);
 
                 if show_preview {
                     // When preview is enabled, fuzzy search takes full screen
@@ -200,4 +196,3 @@ impl TuiRenderer {
         Ok(())
     }
 }
-

@@ -57,12 +57,20 @@ Texty uses a modal interface similar to Vim:
 - `:q` - Quit
 - `:wq` - Write and quit
 - `:e <file>` - Open file
+- Double space - Open fuzzy file search
 
 #### Search
 - `/` - Search forward
 - `?` - Search backward
 - `n` - Next match
 - `N` - Previous match
+
+#### Fuzzy Search
+- Double space - Open fuzzy file search
+- Type to filter files
+- `j`/`k` or arrow keys - Navigate up/down
+- `Enter` - Open selected file
+- `Esc` - Cancel fuzzy search
 
 ## Features
 
