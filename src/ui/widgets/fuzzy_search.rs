@@ -218,6 +218,27 @@ impl<'a> FuzzySearchWidget<'a> {
             file_lines.push(Line::from(spans).style(style));
         }
 
+        // Add directory placeholder if selected item is a directory
+        if let Some(selected_item) = self.state.filtered_items.get(self.state.selected_index) {
+            if selected_item.is_dir {
+                let dir_name = selected_item.path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&selected_item.name);
+                
+                let placeholder_text = format!("'{}' is a directory", dir_name);
+                let placeholder_line = Line::from(vec![
+                    Span::styled(
+                        placeholder_text,
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::ITALIC),
+                    )
+                ]);
+                
+                file_lines.push(placeholder_line);
+            }
+        }
+
         let file_list_paragraph = Paragraph::new(file_lines)
             .block(file_list_block)
             .wrap(ratatui::widgets::Wrap { trim: true });
