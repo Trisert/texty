@@ -231,8 +231,8 @@ fn apply_tree_sitter_syntax_highlighting(
     // Try tree-sitter highlighting on the formatted text
     if let Some(language_id) = file_extension_to_language_id(file_extension) {
         let config = crate::syntax::language::get_language_config(language_id);
-        if let Ok(mut highlighter) = crate::syntax::SyntaxHighlighter::new(config) {
-            if highlighter.parse(&formatted_text).is_ok() {
+        if let Ok(mut highlighter) = crate::syntax::SyntaxHighlighter::new(config)
+            && highlighter.parse(&formatted_text).is_ok() {
                 // Apply tree-sitter highlighting
                 for (line_idx, line) in formatted_text.lines().enumerate() {
                     if let Some(tokens) = highlighter.get_line_highlights(line_idx) {
@@ -250,7 +250,6 @@ fn apply_tree_sitter_syntax_highlighting(
                 }
                 return lines;
             }
-        }
     }
 
     // Fallback to basic regex highlighting on the formatted text
