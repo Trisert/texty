@@ -2,8 +2,8 @@ use crossterm::{
     event::{Event, KeyCode, KeyModifiers, read},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use std::env;
 use std::time::{Duration, Instant};
+use texty::cli;
 use texty::ui::renderer::TuiRenderer;
 use texty::{command::Command, editor::Editor, mode::Mode};
 
@@ -12,6 +12,15 @@ static mut LAST_SPACE_TIME: Option<Instant> = None;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parse command-line arguments first (before terminal setup)
+    let cli_args = match cli::parse_args() {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("Error parsing arguments: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Enable raw mode and enter alternate screen
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -20,14 +29,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize editor
     let mut editor = Editor::new();
 
-    // Parse command-line arguments
-    let args: Vec<String> = env::args().collect();
-    if args.len() > 1 {
-        // Open the specified file
-        let file_path = &args[1];
-        if let Err(e) = editor.open_file(file_path) {
-            eprintln!("Error opening file '{}': {}", file_path, e);
-            // Continue with empty buffer if file can't be opened
+    // Handle file/directory argument if specified
+    if let Some(path) = &cli_args.file {
+        if !cli_args.exists() {
+            eprintln!("Error: Path '{}' does not exist", path.display());
+            // Continue with empty buffer if path doesn't exist
+        } else if cli_args.is_directory() {
+            // Directory → start in fuzzy search mode
+            editor.start_fuzzy_search_in_dir(path);
+        } else {
+            // File → open normally
+            if let Err(e) = editor.open_file(&path.to_string_lossy()) {
+                eprintln!("Error opening file '{}': {}", path.display(), e);
+                // Continue with empty buffer if file can't be opened
+            }
         }
     }
 

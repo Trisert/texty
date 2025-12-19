@@ -17,6 +17,12 @@ tree-sitter-python = "0.20"
 tree-sitter-javascript = "0.20"
 tree-sitter-typescript = "0.20"
 
+# Clipboard
+arboard = "3.6"
+
+# CLI
+clap = { version = "4.0", features = ["derive"] }
+
 # LSP
 lsp-types = "0.95"
 lsp-server = "0.7"

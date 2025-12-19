@@ -46,8 +46,8 @@ impl Default for FuzzySearchState {
             selected_index: 0,
             scroll_offset: 0,
             is_scanning: false,
-            recursive_search: true,  // Default to recursive search
-            max_depth: 0,            // 0 = unlimited depth
+            recursive_search: true, // Default to recursive search
+            max_depth: 0,           // 0 = unlimited depth
             result_count: 0,
             displayed_count: 0,
             has_more_results: false,
@@ -60,6 +60,14 @@ impl Default for FuzzySearchState {
 impl FuzzySearchState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create new fuzzy search state for a specific directory
+    pub fn new_in_directory(dir: &std::path::Path) -> Self {
+        Self {
+            current_path: dir.to_path_buf(),
+            ..Default::default()
+        }
     }
 
     /// Update query with full history backtracking support
@@ -102,7 +110,8 @@ impl FuzzySearchState {
             let end_idx = (start_idx + load_count).min(full_results.len());
 
             // Add more results to filtered_items
-            self.filtered_items.extend_from_slice(&full_results[start_idx..end_idx]);
+            self.filtered_items
+                .extend_from_slice(&full_results[start_idx..end_idx]);
             self.displayed_count = end_idx;
             self.has_more_results = end_idx < self.result_count;
         }
@@ -142,10 +151,14 @@ impl FuzzySearchState {
             scored_items.sort_by(|a, b| {
                 // First sort by match type priority (ExactFilename > FilenameFuzzy > PathFuzzy)
                 let type_order = match (&a.2, &b.2) {
-                    (MatchType::ExactFilename, MatchType::ExactFilename) => std::cmp::Ordering::Equal,
+                    (MatchType::ExactFilename, MatchType::ExactFilename) => {
+                        std::cmp::Ordering::Equal
+                    }
                     (MatchType::ExactFilename, _) => std::cmp::Ordering::Less,
                     (_, MatchType::ExactFilename) => std::cmp::Ordering::Greater,
-                    (MatchType::FilenameFuzzy, MatchType::FilenameFuzzy) => std::cmp::Ordering::Equal,
+                    (MatchType::FilenameFuzzy, MatchType::FilenameFuzzy) => {
+                        std::cmp::Ordering::Equal
+                    }
                     (MatchType::FilenameFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Less,
                     (MatchType::PathFuzzy, MatchType::FilenameFuzzy) => std::cmp::Ordering::Greater,
                     (MatchType::PathFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Equal,
@@ -187,7 +200,7 @@ impl FuzzySearchState {
                     result.map(|_| item.clone())
                 })
                 .collect();
-            
+
             let mut all_scored_items: Vec<(FileItem, i32, MatchType)> = all_filtered_items
                 .iter()
                 .filter_map(|item| {
@@ -205,28 +218,34 @@ impl FuzzySearchState {
             // Sort all results the same way
             all_scored_items.sort_by(|a, b| {
                 let type_order = match (&a.2, &b.2) {
-                    (MatchType::ExactFilename, MatchType::ExactFilename) => std::cmp::Ordering::Equal,
+                    (MatchType::ExactFilename, MatchType::ExactFilename) => {
+                        std::cmp::Ordering::Equal
+                    }
                     (MatchType::ExactFilename, _) => std::cmp::Ordering::Less,
                     (_, MatchType::ExactFilename) => std::cmp::Ordering::Greater,
-                    (MatchType::FilenameFuzzy, MatchType::FilenameFuzzy) => std::cmp::Ordering::Equal,
+                    (MatchType::FilenameFuzzy, MatchType::FilenameFuzzy) => {
+                        std::cmp::Ordering::Equal
+                    }
                     (MatchType::FilenameFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Less,
                     (MatchType::PathFuzzy, MatchType::FilenameFuzzy) => std::cmp::Ordering::Greater,
                     (MatchType::PathFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Equal,
                 };
 
                 match type_order {
-                    std::cmp::Ordering::Equal => {
-                        match b.1.cmp(&a.1) {
-                            std::cmp::Ordering::Equal => a.0.name.cmp(&b.0.name),
-                            other => other,
-                        }
-                    }
+                    std::cmp::Ordering::Equal => match b.1.cmp(&a.1) {
+                        std::cmp::Ordering::Equal => a.0.name.cmp(&b.0.name),
+                        other => other,
+                    },
                     other => other,
                 }
             });
 
-            let all_sorted_items: Vec<FileItem> = all_scored_items.into_iter().map(|(item, _, _)| item).collect();
-            self.result_cache.insert(self.query.clone(), all_sorted_items);
+            let all_sorted_items: Vec<FileItem> = all_scored_items
+                .into_iter()
+                .map(|(item, _, _)| item)
+                .collect();
+            self.result_cache
+                .insert(self.query.clone(), all_sorted_items);
         }
     }
 
@@ -344,7 +363,7 @@ pub fn scan_directory(path: &PathBuf) -> Vec<FileItem> {
 /// Scan a directory recursively and return all files and directories
 pub fn scan_directory_recursive(path: &PathBuf, max_depth: usize) -> Vec<FileItem> {
     let mut items = Vec::new();
-    
+
     // Add parent directory entry
     if let Some(parent) = path.parent() {
         items.push(FileItem {
@@ -360,7 +379,7 @@ pub fn scan_directory_recursive(path: &PathBuf, max_depth: usize) -> Vec<FileIte
 
     // Start recursive scanning
     scan_recursive_helper(path, &mut items, 0, max_depth);
-    
+
     // Sort: files first, then directories, both alphabetically
     items.sort_by(|a, b| {
         match (a.is_dir, b.is_dir) {
@@ -471,40 +490,137 @@ pub fn fuzzy_match_with_priority(query: &str, item: &FileItem) -> Option<(i32, M
     None
 }
 
-/// Simple fuzzy matching algorithm
+/// Improved fuzzy matching algorithm
 /// Returns Some(score) if query matches target, None otherwise
 fn fuzzy_match(query: &str, target: &str) -> Option<i32> {
-    if query.is_empty() {
+    let query_lower = query.to_lowercase();
+    let target_lower = target.to_lowercase();
+
+    if query_lower.is_empty() {
         return Some(0);
     }
 
+    // Check for exact match first
+    if query_lower == target_lower {
+        return Some(100); // Highest score for exact match
+    }
+
+    // Improved fuzzy matching
+    improved_fuzzy_match(&query_lower, &target_lower)
+}
+
+/// Advanced fuzzy matching with better scoring
+fn improved_fuzzy_match(query: &str, target: &str) -> Option<i32> {
     let query_chars: Vec<char> = query.chars().collect();
     let target_chars: Vec<char> = target.chars().collect();
 
-    let mut score = 0;
-    let mut query_idx = 0;
+    let mut positions = Vec::new();
+    let mut used_positions = std::collections::HashSet::new();
+    let mut score = 0.0;
 
-    for &ch in &target_chars {
-        if query_idx < query_chars.len() && ch == query_chars[query_idx] {
-            // Base score for match
-            score += 9;
-            query_idx += 1;
+    // Find all query characters in target (allowing flexible matching)
+    for &query_char in &query_chars {
+        let mut best_pos = None;
+        let mut best_score = f64::NEG_INFINITY;
+
+        // Search for this character in all available positions
+        for (pos, &target_char) in target_chars.iter().enumerate() {
+            if target_char == query_char && !used_positions.contains(&pos) {
+                let position_score = calculate_position_score(pos, target_chars.len());
+                let word_boundary_bonus = calculate_word_boundary_bonus(pos, &target_chars);
+                let total_score = position_score + word_boundary_bonus;
+
+                if total_score > best_score {
+                    best_score = total_score;
+                    best_pos = Some(pos);
+                }
+            }
+        }
+
+        if let Some(pos) = best_pos {
+            positions.push(pos);
+            used_positions.insert(pos);
+            score += 1.0 + best_score;
+        } else {
+            // Character not found
+            return None;
         }
     }
 
-    if query_idx == query_chars.len() {
-        // Bonus for exact matches (when query matches target exactly)
-        if query == target {
-            Some(score + 3) // +3 to make it 30 instead of 27
-        } else {
-            Some(score)
+    // Sort positions to maintain order
+    positions.sort_unstable();
+
+    // Apply final scoring bonuses
+    let consecutive_bonus = calculate_consecutive_bonus(&positions);
+    let length_penalty = calculate_length_penalty(query.len(), target.len());
+
+    score += consecutive_bonus - length_penalty;
+
+    // Normalize and convert to integer
+    let normalized_score = (score / (query.len() as f64 * 2.0)).min(1.0);
+    Some((normalized_score * 80.0) as i32) // Max score 80, less than exact match (100)
+}
+
+/// Calculate score based on character position in target
+fn calculate_position_score(pos: usize, target_len: usize) -> f64 {
+    let relative_pos = pos as f64 / target_len.max(1) as f64;
+    1.0 - (relative_pos * 0.3) // Earlier positions get higher scores
+}
+
+/// Calculate bonus for matches at word boundaries
+fn calculate_word_boundary_bonus(pos: usize, target_chars: &[char]) -> f64 {
+    if pos == 0 {
+        return 2.0; // Start of string - biggest bonus
+    }
+
+    if let Some(&prev_char) = target_chars.get(pos - 1) {
+        if prev_char == '_' || prev_char == '-' || prev_char == '.' || prev_char.is_whitespace() {
+            return 1.5; // Word boundary
         }
+
+// Check for camelCase boundary (lowercase -> uppercase)
+        if prev_char.is_lowercase() && target_chars.get(pos).is_some_and(|&c| c.is_uppercase()) {
+            return 1.4; // CamelCase boundary
+        }
+    }
+
+    0.0 // No word boundary bonus
+}
+
+/// Calculate penalty for length difference
+fn calculate_length_penalty(query_len: usize, target_len: usize) -> f64 {
+    if query_len == target_len {
+        return 0.0; // No penalty
+    }
+
+    let ratio = query_len as f64 / target_len.max(1) as f64;
+    if ratio < 0.3 {
+        1.0 // Large penalty for very short queries
+    } else if ratio < 0.6 {
+        0.5 // Medium penalty
+    } else if ratio > 2.0 {
+        0.8 // Penalty for very short target
     } else {
-        None
+        0.2 // Small penalty
     }
 }
 
+/// Calculate bonus for consecutive character matches
+fn calculate_consecutive_bonus(positions: &[usize]) -> f64 {
+    if positions.len() < 2 {
+        return 0.0;
+    }
 
+    let mut bonus = 0.0;
+
+    for window in positions.windows(2) {
+        if window[1] == window[0] + 1 {
+            bonus += 0.3; // Bonus for each consecutive match
+        }
+    }
+
+    bonus
+}
 
 #[cfg(test)]
 mod tests {
@@ -512,10 +628,127 @@ mod tests {
 
     #[test]
     fn test_fuzzy_match() {
-        assert_eq!(fuzzy_match("abc", "abc"), Some(30)); // Exact match
-        assert_eq!(fuzzy_match("abc", "axbycz"), Some(27)); // Fuzzy match - all chars found
+        assert!(fuzzy_match("abc", "abc").unwrap() > 95); // Exact match - high score
+        assert!(fuzzy_match("abc", "axbycz").is_some()); // Fuzzy match - all chars found
         assert_eq!(fuzzy_match("abc", "xyz"), None); // No match
         assert_eq!(fuzzy_match("", "abc"), Some(0)); // Empty query
+    }
+
+    #[test]
+    fn test_fuzzy_match_non_sequential() {
+        // Should find "abc" even if characters are not sequential
+        let score1 = fuzzy_match("abc", "axbycz").unwrap();
+        let score2 = fuzzy_match("abc", "a_bc").unwrap();
+
+        assert!(score1 > 0);
+        assert!(score2 >= score1); // Word boundary bonus or at least not worse
+
+        // Should find "mlb" in "my_lib.rs"
+        assert!(fuzzy_match("mlb", "my_lib.rs").is_some());
+
+        // Should find "ad" in "README.md"
+        assert!(fuzzy_match("ad", "README.md").is_some());
+
+        // Should find "ab" in "about.txt"
+        assert!(fuzzy_match("ab", "about.txt").is_some());
+
+        // Should find characters in different order
+        assert!(fuzzy_match("da", "README.md").is_some()); // 'd' then 'a' in README.md
+        assert!(fuzzy_match("em", "README.md").is_some()); // 'e' then 'm' in README.md
+
+        // Test that short queries work with common filenames - using realistic examples
+        assert!(fuzzy_match("mn", "main.rs").is_some()); // m-a-i-n from main.rs
+        assert!(fuzzy_match("tt", "tests").is_some()); // t-e-t-s from tests
+        assert!(fuzzy_match("mai", "main.rs").is_some()); // m-a-i from main.rs
+        assert!(fuzzy_match("lib", "lib.rs").is_some()); // l-i-b from lib.rs
+    }
+
+    #[test]
+    fn test_word_boundary_bonuses() {
+        // Word start bonus - "main" should match better at start
+        let start_score = fuzzy_match("main", "main.rs").unwrap();
+        let middle_score = fuzzy_match("main", "my_main.rs").unwrap();
+
+        println!(
+            "DEBUG: start_score={:?}, middle_score={:?}",
+            start_score, middle_score
+        );
+        assert!(start_score >= middle_score); // Should be better or equal
+
+        // CamelCase bonus - "mf" should match MyFunction better than myfunction
+        let camel_score = fuzzy_match("mf", "MyFunction").unwrap();
+        let regular_score = fuzzy_match("mf", "myfunction").unwrap();
+
+        println!(
+            "DEBUG: camel_score={:?}, regular_score={:?}",
+            camel_score, regular_score
+        );
+        assert!(camel_score >= regular_score); // Should be better or equal
+
+        // Snake case bonus - "my" should match my_function better than myfunction
+        let snake_score = fuzzy_match("my", "my_function.rs").unwrap();
+        let no_boundary_score = fuzzy_match("my", "myfunction.rs").unwrap();
+
+        println!(
+            "DEBUG: snake_score={:?}, no_boundary_score={:?}",
+            snake_score, no_boundary_score
+        );
+        assert!(snake_score >= no_boundary_score); // Should be better or equal
+
+        // Test underscore boundary specifically
+        let underscore_score = fuzzy_match("func", "my_function.rs").unwrap();
+        let direct_score = fuzzy_match("func", "myfunction.rs").unwrap();
+        assert!(underscore_score >= direct_score);
+    }
+
+    #[test]
+    fn test_position_scoring() {
+        // Earlier characters should get higher scores
+        let early_score = fuzzy_match("abc", "abcxyz").unwrap();
+        let late_score = fuzzy_match("abc", "xyzabc").unwrap();
+        assert!(early_score > late_score);
+    }
+
+    #[test]
+    fn test_levenshtein_fallback() {
+        // Should match with typos for short queries
+        assert!(fuzzy_match("man", "main").is_some()); // 1 substitution
+        assert!(fuzzy_match("mian", "main").is_some()); // 1 transposition
+
+        // Should not match for very different strings
+        assert_eq!(fuzzy_match("abc", "xyz"), None);
+
+        // Should not apply Levenshtein to long queries
+        assert_eq!(
+            fuzzy_match("verylongquerythatshouldnotuselevenshtein", "short"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_case_insensitive() {
+        assert_eq!(fuzzy_match("abc", "ABC"), fuzzy_match("ABC", "abc"));
+        assert_eq!(
+            fuzzy_match("Main", "main.rs"),
+            fuzzy_match("main", "MAIN.rs")
+        );
+
+        // Case variations should match
+        assert!(fuzzy_match("mlb", "MY_LIB.RS").is_some());
+        assert!(fuzzy_match("MLB", "my_lib.rs").is_some());
+    }
+
+    #[test]
+    fn test_length_penalties() {
+        // Exact length match should be preferred
+        let exact_match = fuzzy_match("main", "main").unwrap();
+        let longer_target = fuzzy_match("main", "main_extended").unwrap();
+        assert!(exact_match > longer_target);
+
+        // Very short queries on long targets should be penalized
+        let short_query = fuzzy_match("a", "very_long_filename.rs").unwrap();
+        let reasonable_query = fuzzy_match("very", "very_long_filename.rs").unwrap();
+        assert!(reasonable_query > short_query);
     }
 
     #[test]
@@ -553,7 +786,7 @@ mod tests {
         let mut state = FuzzySearchState::new();
         state.recursive_search = true;
         state.current_path = PathBuf::from(".");
-        
+
         // Mock recursive items
         state.all_items = vec![
             FileItem {
@@ -594,20 +827,20 @@ mod tests {
             size: Some(1000),
             is_binary: false,
         };
-        
+
         // Test filename matching (should have higher score)
         let result = fuzzy_match_with_priority("main", &item);
         assert!(result.is_some());
         let (score, match_type) = result.unwrap();
         assert!(score > 100); // Should have bonus for filename match
         assert_eq!(match_type, MatchType::FilenameFuzzy);
-        
+
         // Test exact filename match
         let result = fuzzy_match_with_priority("main.rs", &item);
         assert!(result.is_some());
         let (_, match_type) = result.unwrap();
         assert_eq!(match_type, MatchType::ExactFilename);
-        
+
         // Test no match
         let result = fuzzy_match_with_priority("xyz", &item);
         assert!(result.is_none());

@@ -1,6 +1,8 @@
 // lib.rs - Library root for texty editor
 
 pub mod buffer;
+pub mod cli;
+pub mod clipboard;
 pub mod command;
 pub mod cursor;
 pub mod editor;

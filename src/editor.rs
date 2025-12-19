@@ -130,15 +130,15 @@ impl Editor {
                         .insert_char(c, self.cursor.line, self.cursor.col);
                     self.cursor.col += 1;
                     self.notify_text_change();
-                 } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch)
-                     && self.fuzzy_search.is_some()
-                 {
-                     // Handle typing in fuzzy search
-                     if let Some(fuzzy) = &mut self.fuzzy_search {
-                         let mut new_query = fuzzy.query.clone();
-                         new_query.push(c);
-                         fuzzy.update_query(new_query);
-                     }
+                } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch)
+                    && self.fuzzy_search.is_some()
+                {
+                    // Handle typing in fuzzy search
+                    if let Some(fuzzy) = &mut self.fuzzy_search {
+                        let mut new_query = fuzzy.query.clone();
+                        new_query.push(c);
+                        fuzzy.update_query(new_query);
+                    }
                 }
             }
             Command::DeleteChar => {
@@ -150,13 +150,13 @@ impl Editor {
                         self.cursor.col -= 1;
                     }
                 } else if self.mode == Mode::Normal {
-                     if self.fuzzy_search.is_some() {
-                         // Handle backspace in fuzzy search
-                         if let Some(fuzzy) = &mut self.fuzzy_search {
-                             let mut new_query = fuzzy.query.clone();
-                             new_query.pop();
-                             fuzzy.update_query(new_query);
-                         }
+                    if self.fuzzy_search.is_some() {
+                        // Handle backspace in fuzzy search
+                        if let Some(fuzzy) = &mut self.fuzzy_search {
+                            let mut new_query = fuzzy.query.clone();
+                            new_query.pop();
+                            fuzzy.update_query(new_query);
+                        }
                     } else {
                         // Backspace in normal mode: delete previous character
                         if self.cursor.col > 0 {
@@ -617,6 +617,17 @@ impl Editor {
     fn open_fuzzy_search(&mut self) {
         let mut fuzzy_state = FuzzySearchState::new();
         fuzzy_state.current_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
+        // Scan directory and populate items
+        fuzzy_state.rescan_current_directory();
+
+        self.fuzzy_search = Some(fuzzy_state);
+        self.mode = Mode::FuzzySearch;
+    }
+
+    /// Start fuzzy search in a specific directory
+    pub fn start_fuzzy_search_in_dir(&mut self, dir_path: &std::path::Path) {
+        let mut fuzzy_state = FuzzySearchState::new_in_directory(dir_path);
 
         // Scan directory and populate items
         fuzzy_state.rescan_current_directory();
