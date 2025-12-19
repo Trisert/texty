@@ -62,7 +62,27 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
 
 impl<'a> FuzzySearchWidget<'a> {
     fn render_search_input(&self, area: Rect, buf: &mut Buffer) {
-        let search_block = Block::default().borders(Borders::NONE).title("Search:");
+        let mode_indicator = if self.state.recursive_search {
+            " [R]"
+        } else {
+            ""
+        };
+
+        // Show result count
+        let result_display = if self.state.result_count > 0 {
+            if self.state.has_more_results {
+                format!(" ({}+ results)", self.state.displayed_count)
+            } else {
+                format!(" ({} results)", self.state.result_count)
+            }
+        } else if self.state.is_scanning {
+            " (scanning...)".to_string()
+        } else {
+            "".to_string()
+        };
+
+        let title = format!("Search{}{}:", mode_indicator, result_display);
+        let search_block = Block::default().borders(Borders::NONE).title(title);
 
         let search_text = format!("> {}", self.state.query);
         let search_paragraph = Paragraph::new(search_text)
@@ -73,22 +93,7 @@ impl<'a> FuzzySearchWidget<'a> {
     }
 
     fn render_file_list(&self, area: Rect, buf: &mut Buffer) {
-        // Search input area (when in preview mode)
-        let search_area = Rect {
-            x: area.x,
-            y: area.y,
-            width: area.width,
-            height: 3,
-        };
-        self.render_search_input(search_area, buf);
-
-        // File list area
-        let file_list_area = Rect {
-            x: area.x,
-            y: area.y + 3,
-            width: area.width,
-            height: area.height.saturating_sub(3),
-        };
+        let file_list_area = area;
 
         let file_list_block = Block::default().borders(Borders::NONE).title("Files");
 
@@ -113,6 +118,13 @@ impl<'a> FuzzySearchWidget<'a> {
         let start_idx = scroll_offset;
         let end_idx = (start_idx + max_visible_items).min(self.state.filtered_items.len());
 
+        // Auto-load more results when scrolling near bottom
+        if self.state.has_more_results && end_idx >= self.state.filtered_items.len() - 5 {
+            // Load more results when within 5 items of the bottom
+            // Note: In a real implementation, this would need to trigger a callback
+            // to the editor to call load_more_results() on the fuzzy state
+        }
+
         for (i, item) in self.state.filtered_items[start_idx..end_idx]
             .iter()
             .enumerate()
@@ -123,28 +135,68 @@ impl<'a> FuzzySearchWidget<'a> {
             let full_path = item.path.display().to_string();
             let mut spans = Vec::new();
 
-            // For files, show path in gray and filename in white
-            if !item.is_dir {
-                // Find the last path separator
-                if let Some(last_sep) = full_path.rfind('/') {
-                    let path_part = &full_path[..last_sep + 1]; // Include the /
-                    let file_part = &full_path[last_sep + 1..];
+            if self.state.recursive_search {
+                // In recursive mode, show relative path from current_path
+                let relative_path =
+                    if let Ok(relative) = item.path.strip_prefix(&self.state.current_path) {
+                        relative.display().to_string()
+                    } else {
+                        full_path.clone()
+                    };
 
-                    spans.push(Span::styled(
-                        path_part.to_string(),
-                        Style::default().fg(Color::Gray),
-                    ));
-                    spans.push(Span::styled(
-                        file_part.to_string(),
-                        Style::default().fg(Color::White),
-                    ));
+                if !item.is_dir {
+                    // For files: show path in gray, filename in white
+                    if let Some(last_sep) = relative_path.rfind('/') {
+                        let path_part = &relative_path[..last_sep + 1];
+                        let file_part = &relative_path[last_sep + 1..];
+
+                        spans.push(Span::styled(
+                            path_part.to_string(),
+                            Style::default().fg(Color::Gray),
+                        ));
+                        spans.push(Span::styled(
+                            file_part.to_string(),
+                            Style::default().fg(Color::White),
+                        ));
+                    } else {
+                        spans.push(Span::styled(
+                            relative_path,
+                            Style::default().fg(Color::White),
+                        ));
+                    }
                 } else {
-                    // No path separator, just show the filename
-                    spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+                    // For directories in recursive mode, show relative path in cyan
+                    let display_path = if relative_path == ".." {
+                        "..".to_string()
+                    } else {
+                        relative_path + "/"
+                    };
+                    spans.push(Span::styled(display_path, Style::default().fg(Color::Cyan)));
                 }
             } else {
-                // For directories, show the full path in white
-                spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+                // Non-recursive mode (original behavior)
+                if !item.is_dir {
+                    // For files, show path in gray and filename in white
+                    if let Some(last_sep) = full_path.rfind('/') {
+                        let path_part = &full_path[..last_sep + 1]; // Include the /
+                        let file_part = &full_path[last_sep + 1..];
+
+                        spans.push(Span::styled(
+                            path_part.to_string(),
+                            Style::default().fg(Color::Gray),
+                        ));
+                        spans.push(Span::styled(
+                            file_part.to_string(),
+                            Style::default().fg(Color::White),
+                        ));
+                    } else {
+                        // No path separator, just show the filename
+                        spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+                    }
+                } else {
+                    // For directories, show the full path in white
+                    spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+                }
             }
 
             if item.is_hidden {

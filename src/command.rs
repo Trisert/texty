@@ -28,6 +28,8 @@ pub enum Command {
     FuzzySearchDown,
     FuzzySearchSelect,
     FuzzySearchCancel,
+    FuzzySearchToggleRecursive,
+    FuzzySearchLoadMore,
     Quit,
     // Add more as needed
 }

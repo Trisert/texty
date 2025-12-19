@@ -130,14 +130,15 @@ impl Editor {
                         .insert_char(c, self.cursor.line, self.cursor.col);
                     self.cursor.col += 1;
                     self.notify_text_change();
-                } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch)
-                    && self.fuzzy_search.is_some()
-                {
-                    // Handle typing in fuzzy search
-                    if let Some(fuzzy) = &mut self.fuzzy_search {
-                        fuzzy.query.push(c);
-                        fuzzy.update_filter();
-                    }
+                 } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch)
+                     && self.fuzzy_search.is_some()
+                 {
+                     // Handle typing in fuzzy search
+                     if let Some(fuzzy) = &mut self.fuzzy_search {
+                         let mut new_query = fuzzy.query.clone();
+                         new_query.push(c);
+                         fuzzy.update_query(new_query);
+                     }
                 }
             }
             Command::DeleteChar => {
@@ -149,12 +150,13 @@ impl Editor {
                         self.cursor.col -= 1;
                     }
                 } else if self.mode == Mode::Normal {
-                    if self.fuzzy_search.is_some() {
-                        // Handle backspace in fuzzy search
-                        if let Some(fuzzy) = &mut self.fuzzy_search {
-                            fuzzy.query.pop();
-                            fuzzy.update_filter();
-                        }
+                     if self.fuzzy_search.is_some() {
+                         // Handle backspace in fuzzy search
+                         if let Some(fuzzy) = &mut self.fuzzy_search {
+                             let mut new_query = fuzzy.query.clone();
+                             new_query.pop();
+                             fuzzy.update_query(new_query);
+                         }
                     } else {
                         // Backspace in normal mode: delete previous character
                         if self.cursor.col > 0 {
@@ -220,6 +222,17 @@ impl Editor {
             Command::FuzzySearchCancel => {
                 self.fuzzy_search = None;
                 self.mode = Mode::Normal;
+            }
+            Command::FuzzySearchToggleRecursive => {
+                if let Some(fuzzy) = &mut self.fuzzy_search {
+                    fuzzy.toggle_recursive();
+                    let mode_text = if fuzzy.recursive_search {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    };
+                    self.status_message = Some(format!("Recursive search {}", mode_text));
+                }
             }
             Command::InsertMode => self.mode = Mode::Insert,
             Command::NormalMode => self.mode = Mode::Normal,
