@@ -50,7 +50,7 @@ impl TuiRenderer {
                 let show_preview = editor
                     .fuzzy_search
                     .as_ref()
-                    .map(|s| s.show_preview)
+                    .map(|_| false)
                     .unwrap_or(false);
 
                 if show_preview {

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -15,19 +15,6 @@ pub struct FileItem {
     pub is_binary: bool,
 }
 
-/// Cached preview content types
-#[derive(Debug, Clone)]
-pub enum PreviewCache {
-    PlainContent(String), // Plain text content for files (fallback)
-    HighlightedContent(Vec<ratatui::text::Line<'static>>), // Syntax highlighted lines
-    FormattedContent(String), // Formatted plain content
-    FormattedHighlighted(Vec<ratatui::text::Line<'static>>), // Formatted + syntax highlighted
-    Directory(Vec<String>), // Directory listing
-    Binary,               // Binary file marker
-    LargeFile,            // File too large marker
-    Error(String),        // Error message
-}
-
 /// State for fuzzy file search
 #[derive(Debug)]
 pub struct FuzzySearchState {
@@ -38,10 +25,6 @@ pub struct FuzzySearchState {
     pub selected_index: usize,
     pub scroll_offset: usize,
     pub is_scanning: bool,
-    pub show_preview: bool,
-    pub show_formatted_preview: bool, // NEW: Toggle formatted preview
-    pub preview_cache: HashMap<PathBuf, PreviewCache>,
-    pub formatted_preview_cache: HashMap<PathBuf, crate::ui::widgets::preview::PreviewBuffer>, // NEW: Cache for formatted previews
 }
 
 impl Default for FuzzySearchState {
@@ -54,10 +37,6 @@ impl Default for FuzzySearchState {
             selected_index: 0,
             scroll_offset: 0,
             is_scanning: false,
-            show_preview: true,
-            show_formatted_preview: true, // Default: formatted preview enabled
-            preview_cache: HashMap::new(),
-            formatted_preview_cache: HashMap::new(),
         }
     }
 }
@@ -88,14 +67,12 @@ impl FuzzySearchState {
     pub fn select_next(&mut self) {
         if self.selected_index < self.filtered_items.len().saturating_sub(1) {
             self.selected_index += 1;
-            self.update_preview(None);
         }
     }
 
     pub fn select_prev(&mut self) {
         if self.selected_index > 0 {
             self.selected_index = self.selected_index.saturating_sub(1);
-            self.update_preview(None);
         }
     }
 
@@ -112,150 +89,14 @@ impl FuzzySearchState {
     pub fn rescan_current_directory(&mut self) {
         self.all_items = scan_directory(&self.current_path);
         self.update_filter();
-        self.update_preview(None);
     }
 
-    pub fn update_preview(&mut self, _formatter: Option<&crate::formatter::external::Formatter>) {
-        // Clear cache when selection changes to ensure fresh content
-        self.preview_cache.clear();
 
-        if let Some(item) = self.get_selected_item() {
-            let item = item.clone(); // Clone to avoid borrowing issues
 
-            // Check if we already have this item cached
-            if self.preview_cache.contains_key(&item.path) {
-                return; // Already cached
-            }
 
-            // Following Helix's pattern: check file type and cache appropriately
-            if item.is_dir {
-                // For directories, scan and cache the contents
-                self.preview_cache.insert(
-                    item.path.clone(),
-                    PreviewCache::Directory(self.scan_directory_preview(&item.path)),
-                );
-            } else if item.is_binary {
-                self.preview_cache
-                    .insert(item.path.clone(), PreviewCache::Binary);
-            } else {
-                // For text files, read content and format if needed
-                self.load_file_preview(&item, self.show_formatted_preview);
-            }
-        }
-    }
 
-    fn scan_directory_preview(&self, path: &PathBuf) -> Vec<String> {
-        let mut entries = Vec::new();
 
-        if let Ok(read_dir) = fs::read_dir(path) {
-            for entry in read_dir.flatten() {
-                if let Ok(metadata) = entry.metadata() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if metadata.is_dir() {
-                        entries.push(format!("{}/", name));
-                    } else {
-                        entries.push(name);
-                    }
-                }
-            }
-        }
 
-        // Sort: directories first, then files, alphabetically
-        entries.sort_by(|a, b| {
-            let a_is_dir = a.ends_with('/');
-            let b_is_dir = b.ends_with('/');
-            match (a_is_dir, b_is_dir) {
-                (true, false) => std::cmp::Ordering::Less, // directories first
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a.cmp(b),
-            }
-        });
-
-        entries
-    }
-
-    fn load_file_preview(&mut self, item: &FileItem, format_content: bool) {
-        // Check file size - don't preview files larger than 10MB (following Helix)
-        const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
-        if item.size.unwrap_or(0) > MAX_FILE_SIZE {
-            self.preview_cache
-                .insert(item.path.clone(), PreviewCache::LargeFile);
-            return;
-        }
-
-        // Try to read the file
-        match fs::read(&item.path) {
-            Ok(bytes) => {
-                // Check if file contains binary data
-                let is_binary = bytes.contains(&0)
-                    || bytes
-                        .iter()
-                        .any(|&b| b.is_ascii_control() && !matches!(b, b'\n' | b'\r' | b'\t'));
-
-                if is_binary {
-                    self.preview_cache
-                        .insert(item.path.clone(), PreviewCache::Binary);
-                    return;
-                }
-
-                // Convert to string
-                match String::from_utf8(bytes) {
-                    Ok(content) => {
-                        // Limit preview to first 1000 lines to prevent performance issues
-                        let lines: Vec<&str> = content.lines().take(1000).collect();
-                        let truncated_content = if lines.len() >= 1000 {
-                            format!("{}\n... (truncated)", lines.join("\n"))
-                        } else {
-                            lines.join("\n")
-                        };
-
-                        if format_content {
-                            // TODO: Dynamic formatting will be handled by FuzzySearchWidget
-                            // For now, store plain content - widget will format on demand
-                            self.preview_cache.insert(
-                                item.path.clone(),
-                                PreviewCache::PlainContent(truncated_content),
-                            );
-                        } else {
-                            // Store as plain content
-                            self.preview_cache.insert(
-                                item.path.clone(),
-                                PreviewCache::PlainContent(truncated_content),
-                            );
-                        }
-                    }
-                    Err(_) => {
-                        self.preview_cache
-                            .insert(item.path.clone(), PreviewCache::Binary);
-                    }
-                }
-            }
-            Err(e) => {
-                self.preview_cache.insert(
-                    item.path.clone(),
-                    PreviewCache::Error(format!("Unable to read file: {}", e)),
-                );
-            }
-        }
-    }
-
-    pub fn get_preview(&self, path: &PathBuf) -> Option<&PreviewCache> {
-        self.preview_cache.get(path)
-    }
-
-    pub fn toggle_preview(&mut self) {
-        self.show_preview = !self.show_preview;
-        // Clear cache when toggling to ensure fresh content when re-enabled
-        if !self.show_preview {
-            self.preview_cache.clear();
-        }
-    }
-
-    pub fn toggle_formatted_preview(&mut self) {
-        self.show_formatted_preview = !self.show_formatted_preview;
-        // Clear cache when toggling to ensure fresh content with new formatting
-        self.preview_cache.clear();
-    }
 }
 
 /// Scan a directory and return all files and directories

@@ -596,7 +596,7 @@ impl Editor {
 
         // Scan directory and populate items
         fuzzy_state.rescan_current_directory();
-        fuzzy_state.update_preview(None);
+
 
         self.fuzzy_search = Some(fuzzy_state);
         self.mode = Mode::FuzzySearch;
