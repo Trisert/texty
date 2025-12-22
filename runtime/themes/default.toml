@@ -1,36 +1,36 @@
 [palette]
-Red = "#ff0000"
-Green = "#00ff00"
-Blue = "#0000ff"
-Yellow = "#ffff00"
-Cyan = "#00ffff"
-Magenta = "#ff00ff"
-Gray = "#808080"
-White = "#ffffff"
+Red = "#ff5555"
+Green = "#50fa7b"
+Blue = "#6272a4"
+Yellow = "#f1fa8c"
+Cyan = "#8be9fd"
+Magenta = "#ff79c6"
+Gray = "#f8f8f2"
+White = "#f8f8f2"
 
 [keyword]
-fg = "Blue"
+fg = "#ff79c6"
 
 [function]
-fg = "Green"
+fg = "#50fa7b"
 
 [string]
-fg = "Red"
+fg = "#f1fa8c"
 
 [comment]
-fg = "Gray"
+fg = "#6272a4"
 
 [variable]
-fg = "White"
+fg = "#f8f8f2"
 
 [type]
-fg = "Cyan"
+fg = "#8be9fd"
 
 [operator]
-fg = "Cyan"
+fg = "#ff79c6"
 
 [punctuation.bracket]
-fg = "White"
+fg = "#f8f8f2"
 
 [string.regex]
-fg = "bright_red"
+fg = "#ff5555"

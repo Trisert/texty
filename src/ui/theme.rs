@@ -44,7 +44,7 @@ impl Default for GeneralTheme {
     fn default() -> Self {
         Self {
             background: Color::Black,
-            foreground: Color::White,
+            foreground: Color::Rgb(248, 248, 242), // Light gray for better contrast
         }
     }
 }
@@ -52,12 +52,12 @@ impl Default for GeneralTheme {
 impl Default for SyntaxTheme {
     fn default() -> Self {
         Self {
-            keyword: Color::Cyan,
-            function: Color::Green,
-            r#type: Color::Yellow,
-            string: Color::Red,
-            comment: Color::Blue,
-            variable: Color::White,
+            keyword: Color::Rgb(255, 121, 198), // Pink/cyan
+            function: Color::Rgb(80, 250, 123), // Green
+            r#type: Color::Rgb(139, 233, 253), // Cyan
+            string: Color::Rgb(241, 250, 140), // Yellow
+            comment: Color::Rgb(98, 114, 164), // Dark blue
+            variable: Color::Rgb(248, 248, 242), // Light gray
         }
     }
 }
@@ -68,8 +68,8 @@ impl Default for UiTheme {
             status_bar_bg: Color::Blue,
             status_bar_fg: Color::White,
             gutter_fg: Color::DarkGray,
-            cursor_bg: Color::Black,
-            cursor_fg: Color::White,
+            cursor_bg: Color::Gray,
+            cursor_fg: Color::Black,
             diagnostic_error: Color::Red,
             diagnostic_warning: Color::Yellow,
             diagnostic_info: Color::Blue,
@@ -91,7 +91,7 @@ impl Theme {
                 self.general.foreground
             }
         } else {
-            // Fallback to hardcoded colors
+            // Fallback to hardcoded colors with better contrast
             match capture_name {
                 "keyword" => self.syntax.keyword,
                 "function" | "function.macro" => self.syntax.function,
@@ -100,10 +100,10 @@ impl Theme {
                 "comment" => self.syntax.comment,
                 "variable" | "variable.member" => self.syntax.variable,
                 "constant.builtin" | "constant.numeric.integer" | "constant.numeric.float" => {
-                    Color::Cyan
+                    Color::Rgb(139, 233, 253) // Cyan
                 }
-                "operator" => Color::Yellow,
-                "punctuation.bracket" => Color::White,
+                "operator" => Color::Rgb(255, 121, 198), // Pink
+                "punctuation.bracket" => self.syntax.variable,
                 _ => self.general.foreground, // default color
             }
         }
