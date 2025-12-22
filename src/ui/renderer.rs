@@ -25,13 +25,20 @@ pub struct TuiRenderer {
 
 impl TuiRenderer {
     /// Create a new TuiRenderer
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(
+        use_terminal_palette: bool,
+        theme_name: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let backend = CrosstermBackend::new(std::io::stdout());
         let terminal = Terminal::new(backend)?;
-        let mut theme = Theme::default();
+        let mut theme = if use_terminal_palette {
+            Theme::with_terminal_palette()
+        } else {
+            Theme::default()
+        };
 
-        // Try to load syntax theme
-        if let Ok(loaded_theme) = crate::syntax::Theme::from_file("runtime/themes/default.toml") {
+        let theme_path = format!("runtime/themes/{}.toml", theme_name);
+        if let Ok(loaded_theme) = crate::syntax::Theme::from_file(&theme_path) {
             theme.loaded_syntax_theme = Some(loaded_theme);
         }
 
@@ -46,10 +53,11 @@ impl TuiRenderer {
             // Clear entire terminal buffer first to prevent artifacts during fuzzy search
             for y in 0..size.height {
                 for x in 0..size.width {
-                    f.buffer_mut()
-                        .get_mut(x, y)
-                        .set_char(' ')
-                        .set_style(Style::default().bg(self.theme.general.background).fg(self.theme.general.background));
+                    f.buffer_mut().get_mut(x, y).set_char(' ').set_style(
+                        Style::default()
+                            .bg(self.theme.general.background)
+                            .fg(self.theme.general.background),
+                    );
                 }
             }
 

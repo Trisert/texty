@@ -47,7 +47,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize renderer
-    let mut renderer = TuiRenderer::new()?;
+    let use_terminal_palette = cli_args.terminal_palette
+        || std::env::var("TEXTY_TERMINAL_PALETTE")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
+    let mut renderer = TuiRenderer::new(use_terminal_palette, &cli_args.theme)?;
 
     // Basic event loop
     loop {

@@ -51,18 +51,12 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         if show_preview {
             let horizontal_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(60),
-                ])
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
                 .split(inner_area);
 
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),
-                    Constraint::Min(1),
-                ])
+                .constraints([Constraint::Length(3), Constraint::Min(1)])
                 .split(horizontal_chunks[0]);
 
             self.render_search_input(vertical_chunks[0], buf);
@@ -71,10 +65,7 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         } else {
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),
-                    Constraint::Min(1),
-                ])
+                .constraints([Constraint::Length(3), Constraint::Min(1)])
                 .split(inner_area);
 
             self.render_search_input(vertical_chunks[0], buf);

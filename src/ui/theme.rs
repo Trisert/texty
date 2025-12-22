@@ -1,5 +1,6 @@
 // ui/theme.rs - Theme system for UI styling
 
+use super::system_theme::TerminalPalette;
 use ratatui::style::Color;
 
 /// Theme configuration
@@ -9,6 +10,8 @@ pub struct Theme {
     pub syntax: SyntaxTheme,
     pub ui: UiTheme,
     pub loaded_syntax_theme: Option<crate::syntax::Theme>,
+    pub use_terminal_palette: bool,
+    pub terminal_palette: Option<TerminalPalette>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,11 +55,11 @@ impl Default for GeneralTheme {
 impl Default for SyntaxTheme {
     fn default() -> Self {
         Self {
-            keyword: Color::Rgb(255, 121, 198), // Pink/cyan
-            function: Color::Rgb(80, 250, 123), // Green
-            r#type: Color::Rgb(139, 233, 253), // Cyan
-            string: Color::Rgb(241, 250, 140), // Yellow
-            comment: Color::Rgb(98, 114, 164), // Dark blue
+            keyword: Color::Rgb(255, 121, 198),  // Pink/cyan
+            function: Color::Rgb(80, 250, 123),  // Green
+            r#type: Color::Rgb(139, 233, 253),   // Cyan
+            string: Color::Rgb(241, 250, 140),   // Yellow
+            comment: Color::Rgb(98, 114, 164),   // Dark blue
             variable: Color::Rgb(248, 248, 242), // Light gray
         }
     }
@@ -79,8 +82,37 @@ impl Default for UiTheme {
 }
 
 impl Theme {
+    pub fn with_terminal_palette() -> Self {
+        Self {
+            use_terminal_palette: true,
+            terminal_palette: Some(TerminalPalette::detect()),
+            ..Default::default()
+        }
+    }
+
     /// Get syntax color for a capture name
     pub fn syntax_color(&self, capture_name: &str) -> Color {
+        // If terminal palette is enabled, use it
+        if self.use_terminal_palette
+            && let Some(palette) = &self.terminal_palette
+        {
+            let colors = palette.get_syntax_colors();
+            return match capture_name {
+                "keyword" => colors.keyword,
+                "function" | "function.macro" => colors.function,
+                "type" | "type.builtin" => colors.r#type,
+                "string" | "string.escape" => colors.string,
+                "comment" => colors.comment,
+                "variable" | "variable.member" => colors.variable,
+                "constant.builtin" | "constant.numeric.integer" | "constant.numeric.float" => {
+                    colors.constant
+                }
+                "operator" => colors.operator,
+                "punctuation.bracket" => colors.punctuation,
+                _ => self.general.foreground,
+            };
+        }
+
         // If we have a loaded theme, use it
         if let Some(loaded_theme) = &self.loaded_syntax_theme {
             let style = loaded_theme.get_style(capture_name);
