@@ -55,6 +55,15 @@ impl EditorPane<'_> {
 
 impl Widget for EditorPane<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        // Clear entire editor area to prevent character artifacts during file switching
+        for y in 0..area.height {
+            for x in 0..area.width {
+                buf.get_mut(area.x + x, area.y + y)
+                    .set_char(' ')
+                    .set_style(Style::default().bg(self.theme.general.background));
+            }
+        }
+
         for i in 0..area.height as usize {
             let line_idx = self.editor.viewport.offset_line + i;
             if let Some(line) = self.editor.buffer.line(line_idx) {

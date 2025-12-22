@@ -43,11 +43,21 @@ impl TuiRenderer {
         self.terminal.draw(|f| {
             let size = f.size();
 
+            // Clear entire terminal buffer first to prevent artifacts during fuzzy search
+            for y in 0..size.height {
+                for x in 0..size.width {
+                    f.buffer_mut()
+                        .get_mut(x, y)
+                        .set_char(' ')
+                        .set_style(Style::default().bg(self.theme.general.background).fg(self.theme.general.background));
+                }
+            }
+
             // Check if fuzzy search is active
             let fuzzy_search_active = editor.fuzzy_search.is_some();
 
             let (_fuzzy_area, content_area) = if fuzzy_search_active {
-                let show_preview = editor.fuzzy_search.as_ref().map(|_| false).unwrap_or(false);
+                let show_preview = editor.fuzzy_search.as_ref().map(|_| true).unwrap_or(false);
 
                 if show_preview {
                     // When preview is enabled, fuzzy search takes full screen

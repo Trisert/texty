@@ -162,6 +162,7 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             KeyCode::Enter => Some(Command::FuzzySearchSelect),
             KeyCode::Up | KeyCode::Char('k') => Some(Command::FuzzySearchUp),
             KeyCode::Down | KeyCode::Char('j') => Some(Command::FuzzySearchDown),
+            KeyCode::Tab => Some(Command::FuzzySearchLoadMore),
             KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(Command::FuzzySearchToggleRecursive)
             }

@@ -234,6 +234,11 @@ impl Editor {
                     self.status_message = Some(format!("Recursive search {}", mode_text));
                 }
             }
+            Command::FuzzySearchLoadMore => {
+                if let Some(fuzzy) = &mut self.fuzzy_search {
+                    fuzzy.load_more_results();
+                }
+            }
             Command::InsertMode => self.mode = Mode::Insert,
             Command::NormalMode => self.mode = Mode::Normal,
 
@@ -366,6 +371,12 @@ impl Editor {
     pub fn open_file(&mut self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
         self.buffer.load_from_file(path)?;
         self.buffer.file_path = Some(path.to_string());
+
+        // Reset viewport and cursor to ensure clean rendering state
+        self.viewport.offset_line = 0;
+        self.viewport.offset_col = 0;
+        self.cursor.line = 0;
+        self.cursor.col = 0;
 
         // Update language based on file extension
         let language_config = crate::syntax::language::get_language_config_by_extension(

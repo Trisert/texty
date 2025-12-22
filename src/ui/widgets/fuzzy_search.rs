@@ -1,5 +1,6 @@
 use crate::fuzzy_search::FuzzySearchState;
 use crate::ui::theme::Theme;
+use crate::ui::widgets::preview::render_preview_content;
 
 use ratatui::{
     buffer::Buffer,
@@ -42,21 +43,43 @@ impl<'a> FuzzySearchWidget<'a> {
 
 impl<'a> Widget for FuzzySearchWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Create the main block with minimal styling
-        let block = Block::default().style(Style::default().bg(Color::Black));
-
-        // Always use vertical layout (no preview)
+        let block = Block::default().style(Style::default().bg(self.theme.ui.status_bar_bg));
         let inner_area = block.inner(area);
-        let vertical_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // Search input area
-                Constraint::Min(1),    // File list area
-            ])
-            .split(inner_area);
 
-        self.render_search_input(vertical_chunks[0], buf);
-        self.render_file_list(vertical_chunks[1], buf);
+        let show_preview = area.width > 80 && self.state.current_preview.is_some();
+
+        if show_preview {
+            let horizontal_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(60),
+                ])
+                .split(inner_area);
+
+            let vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(1),
+                ])
+                .split(horizontal_chunks[0]);
+
+            self.render_search_input(vertical_chunks[0], buf);
+            self.render_file_list(vertical_chunks[1], buf);
+            self.render_preview(horizontal_chunks[1], buf);
+        } else {
+            let vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Min(1),
+                ])
+                .split(inner_area);
+
+            self.render_search_input(vertical_chunks[0], buf);
+            self.render_file_list(vertical_chunks[1], buf);
+        }
     }
 }
 
@@ -70,18 +93,25 @@ impl<'a> FuzzySearchWidget<'a> {
 
         // Show result count
         let result_display = if self.state.result_count > 0 {
-            if self.state.has_more_results {
-                format!(" ({}+ results)", self.state.displayed_count)
-            } else {
-                format!(" ({} results)", self.state.result_count)
-            }
+            format!(
+                " ({}/{})",
+                self.state.displayed_count, self.state.result_count
+            )
         } else if self.state.is_scanning {
             " (scanning...)".to_string()
         } else {
             "".to_string()
         };
 
-        let title = format!("Search{}{}:", mode_indicator, result_display);
+        let pagination_hint = if self.state.has_more_results {
+            " - Tab for more"
+        } else {
+            ""
+        };
+        let title = format!(
+            "Search{}{}{}:",
+            mode_indicator, result_display, pagination_hint
+        );
         let search_block = Block::default().borders(Borders::NONE).title(title);
 
         let search_text = format!("> {}", self.state.query);
@@ -244,5 +274,31 @@ impl<'a> FuzzySearchWidget<'a> {
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         file_list_paragraph.render(file_list_area, buf);
+    }
+
+    fn render_preview(&self, area: Rect, buf: &mut Buffer) {
+        if let Some(preview_buffer) = &self.state.current_preview {
+            let preview_block = Block::default()
+                .borders(Borders::ALL)
+                .title("Preview")
+                .style(Style::default().bg(self.theme.ui.status_bar_bg));
+
+            let inner_area = preview_block.inner(area);
+            preview_block.render(area, buf);
+
+            let preview_paragraph = render_preview_content(preview_buffer, self.theme, inner_area);
+            preview_paragraph.render(inner_area, buf);
+        } else {
+            let no_preview_block = Block::default()
+                .borders(Borders::ALL)
+                .title("Preview")
+                .style(Style::default().bg(self.theme.ui.status_bar_bg));
+
+            let no_preview_text = Paragraph::new("No preview available")
+                .style(Style::default().fg(Color::Gray))
+                .block(no_preview_block);
+
+            no_preview_text.render(area, buf);
+        }
     }
 }
