@@ -288,7 +288,7 @@ impl<'a> FuzzySearchWidget<'a> {
     }
 
     fn render_preview(&self, area: Rect, buf: &mut Buffer) {
-        if let Some(_preview_buffer) = &self.state.current_preview {
+        if let Some(preview_buffer) = &self.state.current_preview {
             let preview_block = Block::default()
                 .borders(Borders::ALL)
                 .title("Preview")
@@ -297,10 +297,8 @@ impl<'a> FuzzySearchWidget<'a> {
             let inner_area = preview_block.inner(area);
             preview_block.render(area, buf);
 
-            if let Some(preview_buffer) = &self.state.current_preview {
-                let preview_paragraph = render_preview_content(preview_buffer, self.theme, inner_area);
-                preview_paragraph.render(inner_area, buf);
-            }
+            let preview_paragraph = render_preview_content(preview_buffer, self.theme, inner_area);
+            preview_paragraph.render(inner_area, buf);
         } else {
             let no_preview_block = Block::default()
                 .borders(Borders::ALL)
