@@ -340,7 +340,7 @@ fn fuzzy_match_v1(text: &str, pattern: &str, case_sensitive: bool) -> Option<Fzf
 // ===== FUZZY SEARCH CONSTANTS =====
 
 /// Default number of results to display initially for performance
-const DEFAULT_DISPLAY_LIMIT: usize = 100;
+const DEFAULT_DISPLAY_LIMIT: usize = usize::MAX;
 
 // ===== FILE TYPE AND DIRECTORY SCORING =====
 
@@ -845,25 +845,10 @@ impl FuzzySearchState {
         self.scroll_offset = 0;
     }
 
-    /// Load more results for pagination
+    /// Load more results for pagination (no-op since all results shown)
     pub fn load_more_results(&mut self) {
         if !self.has_more_results {
             return;
-        }
-
-        let remaining = self.result_count - self.displayed_count;
-        let load_count = remaining.min(DEFAULT_DISPLAY_LIMIT);
-
-        // Get cached full results
-        if let Some(full_results) = self.result_cache.get(&self.query) {
-            let start_idx = self.displayed_count;
-            let end_idx = (start_idx + load_count).min(full_results.len());
-
-            // Add more results to filtered_items
-            self.filtered_items
-                .extend_from_slice(&full_results[start_idx..end_idx]);
-            self.displayed_count = end_idx;
-            self.has_more_results = end_idx < self.result_count;
         }
     }
 
@@ -876,9 +861,8 @@ impl FuzzySearchState {
         if self.query.is_empty() {
             self.filtered_items = self.all_items.clone();
             self.result_count = self.filtered_items.len();
-            self.displayed_count = self.filtered_items.len().min(DEFAULT_DISPLAY_LIMIT);
-            self.has_more_results = self.filtered_items.len() > DEFAULT_DISPLAY_LIMIT;
-            self.filtered_items.truncate(self.displayed_count);
+            self.displayed_count = self.filtered_items.len();
+            self.has_more_results = false;
         } else {
             // Single-pass filtering with optimized fzf-style scoring
             let mut scored_items: Vec<(FileItem, i32, MatchType)> = self
@@ -944,8 +928,8 @@ impl FuzzySearchState {
             // Extract just the items
             self.filtered_items = scored_items.into_iter().map(|(item, _, _)| item).collect();
             self.result_count = self.filtered_items.len();
-            self.displayed_count = self.filtered_items.len().min(DEFAULT_DISPLAY_LIMIT);
-            self.has_more_results = self.filtered_items.len() > DEFAULT_DISPLAY_LIMIT;
+            self.displayed_count = self.filtered_items.len();
+            self.has_more_results = false;
             self.filtered_items.truncate(self.displayed_count);
         }
 
@@ -1804,11 +1788,11 @@ mod tests {
     }
 
     #[test]
-    fn test_display_limit_constant() {
-        // Verify that DEFAULT_DISPLAY_LIMIT is used consistently
-        assert_eq!(DEFAULT_DISPLAY_LIMIT, 100);
+    fn test_display_no_limit() {
+        // Verify that all results are displayed (no limit)
+        assert_eq!(DEFAULT_DISPLAY_LIMIT, usize::MAX);
 
-        // Test that results are limited correctly
+        // Test that all results are shown
         let items: Vec<FileItem> = (0..150)
             .map(|i| FileItem {
                 name: format!("file_{}.rs", i),
@@ -1826,10 +1810,10 @@ mod tests {
         state.query = "file".to_string();
         state.update_filter();
 
-        // Should limit to DEFAULT_DISPLAY_LIMIT items
-        assert_eq!(state.displayed_count, DEFAULT_DISPLAY_LIMIT);
-        assert!(state.has_more_results);
-        assert_eq!(state.result_count, 150); // Total should be full count
+        // Should display all items
+        assert_eq!(state.displayed_count, 150);
+        assert!(!state.has_more_results);
+        assert_eq!(state.result_count, 150);
     }
 
     #[test]

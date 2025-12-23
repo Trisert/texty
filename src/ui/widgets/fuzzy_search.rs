@@ -108,27 +108,34 @@ impl<'a> FuzzySearchWidget<'a> {
             ""
         };
 
-        // Show result count
-        let result_display = if self.state.result_count > 0 {
-            format!(
-                " ({}/{})",
-                self.state.displayed_count, self.state.result_count
-            )
-        } else if self.state.is_scanning {
-            " (scanning...)".to_string()
+        let binding = if !self.state.query.is_empty() {
+            format!(" {} results", self.state.result_count)
         } else {
-            "".to_string()
+            String::new()
+        };
+        let result_display = binding.as_str();
+
+        let mode_title = if self.state.recursive_search && self.state.follow_gitignore {
+            String::from("Search[R][G]:")
+        } else if self.state.recursive_search {
+            String::from("Search[R]:")
+        } else if self.state.follow_gitignore {
+            String::from("Search[G]:")
+        } else {
+            String::from("Search:")
         };
 
-        let pagination_hint = if self.state.has_more_results {
-            " - Tab for more"
+        let result_title = if !self.state.query.is_empty() {
+            format!("{} results", result_display)
         } else {
-            ""
+            String::new()
         };
-        let title = format!(
-            "Search{}{}{}{}:",
-            mode_indicator, gitignore_indicator, result_display, pagination_hint
-        );
+
+        let mut title = mode_title.clone();
+        if !result_title.is_empty() {
+            title.push_str(" ");
+            title.push_str(result_title.as_str());
+        }
         let search_block = Block::default().borders(Borders::NONE).title(title);
 
         let search_text = format!("> {}", self.state.query);
