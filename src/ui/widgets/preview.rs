@@ -5,29 +5,62 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::path::PathBuf;
+use std::collections::HashSet;
+use lru::LruCache;
 
-use crate::formatter::get_formatter_config;
-use crate::syntax::{LanguageId, SyntaxHighlighter, get_language_config_by_extension};
+use crate::syntax::{LanguageId, SyntaxHighlighter, get_language_config_by_extension, get_language_config};
 use crate::ui::theme::Theme;
 
-/// Preview buffer containing formatted, highlighted file content
+#[derive(Debug, Clone, Default)]
+pub struct HighlightProgress {
+    highlighted_lines: HashSet<usize>,
+    fully_parsed: bool,
+}
+
+impl HighlightProgress {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn is_line_highlighted(&self, line: usize) -> bool {
+        self.highlighted_lines.contains(&line)
+    }
+
+    pub fn mark_lines_highlighted(&mut self, start_line: usize, line_count: usize) {
+        for line in start_line..(start_line + line_count) {
+            self.highlighted_lines.insert(line);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.highlighted_lines.clear();
+        self.fully_parsed = false;
+    }
+
+    pub fn is_fully_parsed(&self) -> bool {
+        self.fully_parsed
+    }
+
+    pub fn set_fully_parsed(&mut self, fully_parsed: bool) {
+        self.fully_parsed = fully_parsed;
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PreviewBuffer {
     pub content: String,
     pub language: Option<LanguageId>,
-    pub syntax_highlights: Vec<crate::syntax::HighlightToken>,
+    pub syntax_highlights: Option<Vec<crate::syntax::HighlightToken>>,
+    pub highlight_progress: HighlightProgress,
 }
 
 impl PreviewBuffer {
-    /// Load and prepare file content for preview using editor-style logic
     pub fn load_from_file(file_path: &PathBuf) -> Result<Self, String> {
-        // 1. Load file content
         let content = match std::fs::read_to_string(file_path) {
             Ok(content) => content,
             Err(e) => return Err(format!("Failed to read file: {}", e)),
         };
 
-        // 2. Detect language from extension
         let extension = file_path
             .extension()
             .and_then(|ext| ext.to_str())
@@ -36,54 +69,87 @@ impl PreviewBuffer {
         let language_config = get_language_config_by_extension(extension);
         let language = language_config.as_ref().map(|config| config.id);
 
-        // 3. Apply formatting if formatter is available
-        let formatted_content = if let Some(lang) = language {
-            if let Some(formatter_config) = get_formatter_config(lang) {
-                match crate::formatter::external::Formatter::new(formatter_config) {
-                    Ok(formatter) => {
-                        match formatter.format_text(&content) {
-                            Ok(formatted) => formatted,
-                            Err(_) => content, // Fallback to original on format error
-                        }
-                    }
-                    Err(_) => content, // Fallback to original if formatter unavailable
-                }
-            } else {
-                content // No formatter for this language
-            }
-        } else {
-            content // No language detected
-        };
+        Ok(Self {
+            content,
+            language,
+            syntax_highlights: None,
+            highlight_progress: HighlightProgress::new(),
+        })
+    }
 
-        // 4. Generate syntax highlights
-        let syntax_highlights = if let Some(config) = language_config {
-            match SyntaxHighlighter::new(config) {
-                Ok(mut highlighter) => {
-                    if highlighter.parse(&formatted_content).is_err() {
-                        Vec::new() // Fallback on parse error
-                    } else {
-                        // Collect highlights for all lines (limited for performance)
-                        let mut all_highlights = Vec::new();
-                        for line_idx in 0..formatted_content.lines().count().min(1000) {
-                            if let Some(line_highlights) = highlighter.get_line_highlights(line_idx)
-                            {
-                                all_highlights.extend(line_highlights.iter().cloned());
+    pub fn ensure_highlighted(&mut self, start_line: usize, line_count: usize) {
+        if self.highlight_progress.is_fully_parsed() {
+            return;
+        }
+
+        let total_lines = self.content.lines().count();
+        let end_line = (start_line + line_count).min(total_lines);
+
+        if let Some(lang) = self.language {
+            let config = get_language_config(lang);
+            if let Ok(mut highlighter) = SyntaxHighlighter::new(config) {
+                if highlighter.parse(&self.content).is_ok() {
+                    if self.syntax_highlights.is_none() {
+                        self.syntax_highlights = Some(Vec::new());
+                    }
+
+                    if let Some(highlights) = &mut self.syntax_highlights {
+                        for line_idx in start_line..end_line {
+                            if !self.highlight_progress.is_line_highlighted(line_idx) {
+                                if let Some(line_highlights) = highlighter.get_line_highlights(line_idx) {
+                                    highlights.extend(line_highlights.iter().cloned());
+                                }
                             }
                         }
-                        all_highlights
                     }
                 }
-                Err(_) => Vec::new(), // No syntax highlighting
             }
         } else {
-            Vec::new() // No language support
-        };
+            if self.syntax_highlights.is_none() {
+                self.syntax_highlights = Some(Vec::new());
+            }
+            self.highlight_progress.set_fully_parsed(true);
+            return;
+        }
 
-        Ok(Self {
-            content: formatted_content,
-            language,
-            syntax_highlights,
-        })
+        self.highlight_progress.mark_lines_highlighted(start_line, end_line - start_line);
+
+        if end_line >= total_lines {
+            self.highlight_progress.set_fully_parsed(true);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PreviewCache {
+    cache: LruCache<PathBuf, PreviewBuffer>,
+    max_size: usize,
+}
+
+impl PreviewCache {
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            cache: LruCache::new(std::num::NonZeroUsize::new(max_size).unwrap()),
+            max_size,
+        }
+    }
+
+    pub fn get(&mut self, path: &PathBuf) -> Option<PreviewBuffer> {
+        self.cache.get(path).cloned()
+    }
+
+    pub fn put(&mut self, path: PathBuf, buffer: PreviewBuffer) {
+        self.cache.put(path, buffer);
+    }
+
+    pub fn clear(&mut self) {
+        self.cache.clear();
+    }
+}
+
+impl Default for PreviewCache {
+    fn default() -> Self {
+        Self::new(50)
     }
 }
 
@@ -99,17 +165,20 @@ pub fn render_preview_content(
         .enumerate()
         .take(area.height as usize) // Limit to visible area
         .map(|(line_idx, line_content)| {
-            // Filter highlights for this specific line
             let line_highlights: Vec<&crate::syntax::HighlightToken> = preview_buffer
                 .syntax_highlights
-                .iter()
-                .filter(|h| {
-                    // Calculate which line this highlight belongs to
-                    let before_highlight = &preview_buffer.content[..h.start];
-                    let highlight_line = before_highlight.chars().filter(|&c| c == '\n').count();
-                    highlight_line == line_idx
+                .as_ref()
+                .map(|highlights| {
+                    highlights
+                        .iter()
+                        .filter(|h| {
+                            let before_highlight = &preview_buffer.content[..h.start];
+                            let highlight_line = before_highlight.chars().filter(|&c| c == '\n').count();
+                            highlight_line == line_idx
+                        })
+                        .collect()
                 })
-                .collect();
+                .unwrap_or_default();
 
             if !line_highlights.is_empty() {
                 // Apply syntax highlighting like the editor does

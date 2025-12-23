@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::ui::widgets::preview::PreviewBuffer;
+use crate::ui::widgets::preview::{PreviewBuffer, PreviewCache};
 
 // ===== FZF-STYLE CORE ALGORITHM =====
 
@@ -559,6 +559,7 @@ pub struct FuzzySearchState {
     pub result_cache: HashMap<String, Vec<FileItem>>,
 
     // Preview functionality
+    pub preview_cache: PreviewCache,
     pub current_preview: Option<PreviewBuffer>,
 }
 
@@ -572,13 +573,14 @@ impl Default for FuzzySearchState {
             selected_index: 0,
             scroll_offset: 0,
             is_scanning: false,
-            recursive_search: true, // Default to recursive search
-            max_depth: 0,           // 0 = unlimited depth
+            recursive_search: true,
+            max_depth: 0,
             result_count: 0,
             displayed_count: 0,
             has_more_results: false,
             query_history: Vec::new(),
             result_cache: HashMap::new(),
+            preview_cache: PreviewCache::default(),
             current_preview: None,
         }
     }
@@ -959,8 +961,17 @@ impl FuzzySearchState {
     pub fn update_preview(&mut self) {
         if let Some(selected_item) = self.filtered_items.get(self.selected_index) {
             if !selected_item.is_dir {
+                if let Some(mut cached) = self.preview_cache.get(&selected_item.path) {
+                    cached.ensure_highlighted(0, 100);
+                    self.preview_cache.put(selected_item.path.clone(), cached);
+                    self.current_preview = self.preview_cache.get(&selected_item.path);
+                    return;
+                }
+
                 match PreviewBuffer::load_from_file(&selected_item.path) {
-                    Ok(preview_buffer) => {
+                    Ok(mut preview_buffer) => {
+                        preview_buffer.ensure_highlighted(0, 100);
+                        self.preview_cache.put(selected_item.path.clone(), preview_buffer.clone());
                         self.current_preview = Some(preview_buffer);
                     }
                     Err(_) => {
@@ -1427,6 +1438,7 @@ pub fn benchmark_fuzzy_search_performance() {
         has_more_results: false,
         query_history: Vec::new(),
         result_cache: HashMap::new(),
+        preview_cache: PreviewCache::default(),
         current_preview: None,
     };
 
