@@ -1490,6 +1490,7 @@ dependencies = [
  "clap",
  "crossterm",
  "futures",
+ "lru",
  "lsp-server",
  "lsp-types",
  "proptest",
