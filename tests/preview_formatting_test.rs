@@ -71,14 +71,21 @@ fn main() {
             preview_buffer.ensure_highlighted(0, 10);
 
             assert!(
-                !preview_buffer.syntax_highlights.as_ref().map_or(true, |v| v.is_empty()),
+                !preview_buffer
+                    .syntax_highlights
+                    .as_ref()
+                    .map_or(true, |v| v.is_empty()),
                 "Should have syntax highlights for Rust code"
             );
 
             println!("✅ Syntax highlighting test passed!");
             println!(
                 "Found {} syntax highlight tokens",
-                preview_buffer.syntax_highlights.as_ref().map(|v| v.len()).unwrap_or(0)
+                preview_buffer
+                    .syntax_highlights
+                    .as_ref()
+                    .map(|v| v.len())
+                    .unwrap_or(0)
             );
         }
         Err(e) => {
@@ -142,7 +149,10 @@ fn main() {
             );
 
             println!("✅ Incremental highlighting test passed!");
-            println!("Initial highlights: {}, Total highlights: {}", initial_count, new_count);
+            println!(
+                "Initial highlights: {}, Total highlights: {}",
+                initial_count, new_count
+            );
         }
         Err(e) => {
             panic!("Failed to create PreviewBuffer: {}", e);
@@ -161,8 +171,9 @@ fn main() {
     let test_file_path = PathBuf::from("test_highlight_progress.rs");
     std::fs::write(&test_file_path, test_content).expect("Failed to create test file");
 
-    let mut preview_buffer = texty::ui::widgets::preview::PreviewBuffer::load_from_file(&test_file_path)
-        .expect("Failed to create PreviewBuffer");
+    let mut preview_buffer =
+        texty::ui::widgets::preview::PreviewBuffer::load_from_file(&test_file_path)
+            .expect("Failed to create PreviewBuffer");
 
     std::fs::remove_file(&test_file_path).ok();
 

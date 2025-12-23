@@ -39,6 +39,32 @@ const BONUS_BOUNDARY_DELIMITER: i16 = BONUS_BOUNDARY + 1;
 // Delimiter characters for path matching
 const DELIMITER_CHARS: &[char] = &['/', ':', ';', '|'];
 
+// ===== GITIGNORE FILTERING =====
+
+fn create_gitignore(root: &Path) -> Option<ignore::gitignore::Gitignore> {
+    let gitignore_path = root.join(".gitignore");
+    if !gitignore_path.exists() {
+        return None;
+    }
+
+    let (gitignore, _err) = ignore::gitignore::Gitignore::new(gitignore_path);
+    Some(gitignore)
+}
+
+fn is_path_ignored(
+    path: &Path,
+    root: &Path,
+    gitignore: &Option<ignore::gitignore::Gitignore>,
+) -> bool {
+    if let Some(gitignore) = gitignore {
+        let stripped = path.strip_prefix(root).unwrap_or(path);
+        let is_dir = path.is_dir();
+        gitignore.matched(stripped, is_dir).is_ignore()
+    } else {
+        false
+    }
+}
+
 // ===== SLAB ALLOCATOR FOR MEMORY OPTIMIZATION =====
 
 /// Slab allocator for reusing memory during fuzzy matching
@@ -646,6 +672,9 @@ pub struct FuzzySearchState {
     // Preview functionality
     pub preview_cache: PreviewCache,
     pub current_preview: Option<PreviewBuffer>,
+
+    // Gitignore filtering
+    pub follow_gitignore: bool,
 }
 
 impl Default for FuzzySearchState {
@@ -667,6 +696,7 @@ impl Default for FuzzySearchState {
             result_cache: HashMap::new(),
             preview_cache: PreviewCache::default(),
             current_preview: None,
+            follow_gitignore: true,
         }
     }
 }
@@ -1032,16 +1062,34 @@ impl FuzzySearchState {
 
     pub fn rescan_current_directory(&mut self) {
         self.all_items = if self.recursive_search {
-            scan_directory_recursive(&self.current_path, self.max_depth)
+            scan_directory_recursive(&self.current_path, self.max_depth, self.follow_gitignore)
         } else {
-            scan_directory(&self.current_path)
+            scan_directory(&self.current_path, self.follow_gitignore)
         };
         self.update_filter();
     }
 
     pub fn toggle_recursive(&mut self) {
         self.recursive_search = !self.recursive_search;
-        self.result_cache.clear(); // Clear cache when toggling mode
+        self.result_cache.clear();
+        self.rescan_current_directory();
+    }
+
+    /// Toggle gitignore filtering on or off.
+    ///
+    /// When enabled, files and directories matching patterns in `.gitignore` are excluded from search results.
+    /// Toggling clears the result cache and triggers a directory rescan.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut state = FuzzySearchState::new();
+    /// state.toggle_gitignore(); // Disable gitignore filtering
+    /// state.toggle_gitignore(); // Re-enable gitignore filtering
+    /// ```
+    pub fn toggle_gitignore(&mut self) {
+        self.follow_gitignore = !self.follow_gitignore;
+        self.result_cache.clear();
         self.rescan_current_directory();
     }
 
@@ -1050,7 +1098,8 @@ impl FuzzySearchState {
             if !selected_item.is_dir {
                 if let Some(mut cached) = self.preview_cache.get(&selected_item.path) {
                     cached.ensure_highlighted(0, 100);
-                    self.preview_cache.put(selected_item.path.clone(), cached.clone());
+                    self.preview_cache
+                        .put(selected_item.path.clone(), cached.clone());
                     self.current_preview = Some(cached);
                     return;
                 }
@@ -1058,7 +1107,8 @@ impl FuzzySearchState {
                 match PreviewBuffer::load_from_file(&selected_item.path) {
                     Ok(mut preview_buffer) => {
                         preview_buffer.ensure_highlighted(0, 100);
-                        self.preview_cache.put(selected_item.path.clone(), preview_buffer.clone());
+                        self.preview_cache
+                            .put(selected_item.path.clone(), preview_buffer.clone());
                         self.current_preview = Some(preview_buffer);
                     }
                     Err(_) => {
@@ -1074,26 +1124,31 @@ impl FuzzySearchState {
     }
 }
 
-/// Scan a directory and return all files and directories
-pub fn scan_directory(path: &PathBuf) -> Vec<FileItem> {
+/// Scan a directory and return all files and directories.
+///
+/// # Arguments
+///
+/// * `path` - The directory path to scan
+/// * `follow_gitignore` - If true, exclude files matching patterns in `.gitignore` and hidden files
+///
+/// # Examples
+///
+/// ```
+/// let items = scan_directory(&PathBuf::from("."), true);
+/// ```
+pub fn scan_directory(path: &PathBuf, follow_gitignore: bool) -> Vec<FileItem> {
     let mut items = Vec::new();
 
-    // Add parent directory entry
-    if let Some(parent) = path.parent() {
-        items.push(FileItem {
-            name: "..".to_string(),
-            path: parent.to_path_buf(),
-            is_dir: true,
-            is_hidden: false,
-            modified: SystemTime::UNIX_EPOCH, // Not relevant for ..
-            size: None,
-            is_binary: false,
-        });
-    }
+    let gitignore = if follow_gitignore {
+        create_gitignore(path)
+    } else {
+        None
+    };
 
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
             if let Ok(metadata) = entry.metadata() {
+                let full_path = entry.path();
                 let name = entry.file_name().to_string_lossy().to_string();
                 let is_hidden = name.starts_with('.');
                 let is_dir = metadata.is_dir();
@@ -1102,19 +1157,26 @@ pub fn scan_directory(path: &PathBuf) -> Vec<FileItem> {
                 let is_binary = if is_dir {
                     false
                 } else {
-                    // Simple binary detection: check file extension
-                    let path = entry.path();
-                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-
+                    let ext = full_path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     matches!(
                         ext,
                         "exe" | "dll" | "bin" | "obj" | "lib" | "a" | "so" | "dylib" | "pdb"
                     )
                 };
 
+                if follow_gitignore {
+                    if is_path_ignored(&full_path, path, &gitignore) {
+                        continue;
+                    }
+
+                    if is_hidden {
+                        continue;
+                    }
+                }
+
                 items.push(FileItem {
                     name,
-                    path: entry.path(),
+                    path: full_path,
                     is_dir,
                     is_hidden,
                     modified,
@@ -1125,23 +1187,35 @@ pub fn scan_directory(path: &PathBuf) -> Vec<FileItem> {
         }
     }
 
-    // Sort: files first, then directories, both alphabetically
-    items.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Greater, // files before directories
-            (false, true) => std::cmp::Ordering::Less,
-            _ => a.name.cmp(&b.name),
-        }
+    items.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Greater,
+        (false, true) => std::cmp::Ordering::Less,
+        _ => a.name.cmp(&b.name),
     });
 
     items
 }
 
-/// Scan a directory recursively and return all files and directories (optimized with parallel processing)
-pub fn scan_directory_recursive(path: &PathBuf, max_depth: usize) -> Vec<FileItem> {
+/// Scan a directory recursively and return all files and directories.
+///
+/// # Arguments
+///
+/// * `path` - The directory path to scan
+/// * `max_depth` - Maximum recursion depth (0 for unlimited)
+/// * `follow_gitignore` - If true, exclude files matching patterns in `.gitignore` and hidden files
+///
+/// # Examples
+///
+/// ```
+/// let items = scan_directory_recursive(&PathBuf::from("."), 0, true);
+/// ```
+pub fn scan_directory_recursive(
+    path: &PathBuf,
+    max_depth: usize,
+    follow_gitignore: bool,
+) -> Vec<FileItem> {
     let mut items = Vec::new();
 
-    // Add parent directory entry
     if let Some(parent) = path.parent() {
         items.push(FileItem {
             name: "..".to_string(),
@@ -1154,17 +1228,13 @@ pub fn scan_directory_recursive(path: &PathBuf, max_depth: usize) -> Vec<FileIte
         });
     }
 
-    // Start recursive scanning with parallel processing
-    let all_items = scan_recursive_helper_parallel(path, max_depth, 0);
+    let all_items = scan_recursive_helper_parallel(path, max_depth, 0, follow_gitignore);
 
-    // Sort: files first, then directories, both alphabetically
     items.extend(all_items);
-    items.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Greater, // files before directories
-            (false, true) => std::cmp::Ordering::Less,
-            _ => a.name.cmp(&b.name),
-        }
+    items.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Greater,
+        (false, true) => std::cmp::Ordering::Less,
+        _ => a.name.cmp(&b.name),
     });
 
     items
@@ -1175,22 +1245,25 @@ fn scan_recursive_helper_parallel(
     path: &PathBuf,
     max_depth: usize,
     current_depth: usize,
+    follow_gitignore: bool,
 ) -> Vec<FileItem> {
     let mut items = Vec::new();
 
-    // Stop recursion if we've reached max depth (0 means unlimited)
     if max_depth > 0 && current_depth >= max_depth {
         return items;
     }
 
+    let gitignore = if follow_gitignore {
+        create_gitignore(path)
+    } else {
+        None
+    };
+
     let mut dirs_to_scan = Vec::new();
 
-    // Process current directory
     if let Ok(entries) = fs::read_dir(path) {
-        // Collect entries to avoid move issues
         let entry_vec: Vec<std::fs::DirEntry> = entries.flatten().collect();
 
-        // First pass: separate files and directories
         let mut dir_paths = Vec::new();
         let file_items: Vec<FileItem> = entry_vec
             .into_iter()
@@ -1205,7 +1278,6 @@ fn scan_recursive_helper_parallel(
                     let is_binary = if is_dir {
                         false
                     } else {
-                        // Simple binary detection: check file extension
                         let path = entry.path();
                         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
@@ -1215,7 +1287,16 @@ fn scan_recursive_helper_parallel(
                         )
                     };
 
-                    // Collect directory paths for recursive scanning
+                    if follow_gitignore {
+                        if is_path_ignored(&full_path, path, &gitignore) {
+                            return None;
+                        }
+
+                        if is_hidden {
+                            return None;
+                        }
+                    }
+
                     if is_dir {
                         dir_paths.push(full_path.clone());
                     }
@@ -1243,10 +1324,11 @@ fn scan_recursive_helper_parallel(
         items.extend(file_items);
     }
 
-    // Parallel scan subdirectories
     let sub_items: Vec<Vec<FileItem>> = dirs_to_scan
         .par_iter()
-        .map(|dir_path| scan_recursive_helper_parallel(dir_path, max_depth, current_depth + 1))
+        .map(|dir_path| {
+            scan_recursive_helper_parallel(dir_path, max_depth, current_depth + 1, follow_gitignore)
+        })
         .collect();
 
     for sub_dir_items in sub_items {
@@ -1531,6 +1613,7 @@ pub fn benchmark_fuzzy_search_performance() {
         result_cache: HashMap::new(),
         preview_cache: PreviewCache::default(),
         current_preview: None,
+        follow_gitignore: true,
     };
 
     // Benchmark old algorithm
@@ -2152,5 +2235,42 @@ mod tests {
         let mid_week_ago = now - std::time::Duration::from_secs(345600);
         let bonus = recency_bonus(&mid_week_ago);
         assert!(bonus > 0 && bonus < 200);
+    }
+
+    #[test]
+    fn test_gitignore_filtering() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        let gitignore_path = root.join(".gitignore");
+        std::fs::write(&gitignore_path, "*.log\ntarget/\n").unwrap();
+
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("src/main.rs"), "").unwrap();
+        std::fs::create_dir_all(root.join("target")).unwrap();
+        std::fs::write(root.join("target/test"), "").unwrap();
+        std::fs::write(root.join("debug.log"), "").unwrap();
+
+        let items_without_filter = scan_directory(&root.to_path_buf(), false);
+        let items_with_filter = scan_directory(&root.to_path_buf(), true);
+
+        let names_without: Vec<_> = items_without_filter
+            .iter()
+            .map(|i| i.name.clone())
+            .collect();
+        let names_with: Vec<_> = items_with_filter.iter().map(|i| i.name.clone()).collect();
+
+        assert!(names_without.iter().any(|n| n.contains("target")));
+        assert!(names_without.iter().any(|n| n.contains("debug.log")));
+        assert!(names_without.iter().any(|n| n == ".gitignore"));
+
+        assert!(!names_with.iter().any(|n| n.contains("target")));
+        assert!(!names_with.iter().any(|n| n.contains("debug.log")));
+        assert!(!names_with.iter().any(|n| n == ".gitignore"));
+        assert!(
+            names_with.iter().any(|n| n == "src") || names_with.iter().any(|n| n.ends_with("src"))
+        );
     }
 }

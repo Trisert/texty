@@ -1,14 +1,16 @@
 // src/ui/widgets/preview.rs - File preview buffer and rendering
 
+use lru::LruCache;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use std::path::PathBuf;
 use std::collections::HashSet;
-use lru::LruCache;
+use std::path::PathBuf;
 
-use crate::syntax::{LanguageId, SyntaxHighlighter, get_language_config_by_extension, get_language_config};
+use crate::syntax::{
+    LanguageId, SyntaxHighlighter, get_language_config, get_language_config_by_extension,
+};
 use crate::ui::theme::Theme;
 
 #[derive(Debug, Clone, Default)]
@@ -87,22 +89,23 @@ impl PreviewBuffer {
 
         if let Some(lang) = self.language {
             let config = get_language_config(lang);
-            if let Ok(mut highlighter) = SyntaxHighlighter::new(config) {
-                if highlighter.parse(&self.content).is_ok() {
+            if let Ok(mut highlighter) = SyntaxHighlighter::new(config)
+                && highlighter.parse(&self.content).is_ok()
+            {
                     if self.syntax_highlights.is_none() {
                         self.syntax_highlights = Some(Vec::new());
                     }
 
                     if let Some(highlights) = &mut self.syntax_highlights {
                         for line_idx in start_line..end_line {
-                            if !self.highlight_progress.is_line_highlighted(line_idx) {
-                                if let Some(line_highlights) = highlighter.get_line_highlights(line_idx) {
-                                    highlights.extend(line_highlights.iter().cloned());
-                                }
+                            if !self.highlight_progress.is_line_highlighted(line_idx)
+                                && let Some(line_highlights) =
+                                    highlighter.get_line_highlights(line_idx)
+                            {
+                                highlights.extend(line_highlights.iter().cloned());
                             }
                         }
                     }
-                }
             }
         } else {
             if self.syntax_highlights.is_none() {
@@ -112,7 +115,8 @@ impl PreviewBuffer {
             return;
         }
 
-        self.highlight_progress.mark_lines_highlighted(start_line, end_line - start_line);
+        self.highlight_progress
+            .mark_lines_highlighted(start_line, end_line - start_line);
 
         if end_line >= total_lines {
             self.highlight_progress.set_fully_parsed(true);
@@ -173,7 +177,8 @@ pub fn render_preview_content(
                         .iter()
                         .filter(|h| {
                             let before_highlight = &preview_buffer.content[..h.start];
-                            let highlight_line = before_highlight.chars().filter(|&c| c == '\n').count();
+                            let highlight_line =
+                                before_highlight.chars().filter(|&c| c == '\n').count();
                             highlight_line == line_idx
                         })
                         .collect()
