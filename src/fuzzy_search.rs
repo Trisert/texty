@@ -1144,12 +1144,14 @@ pub fn scan_directory(path: &PathBuf, follow_gitignore: bool) -> Vec<FileItem> {
                     )
                 };
 
-                if follow_gitignore && is_path_ignored(&full_path, path) {
-                    continue;
-                }
+                if follow_gitignore {
+                    if is_path_ignored(&full_path, path) {
+                        continue;
+                    }
 
-                if is_hidden {
-                    continue;
+                    if is_hidden {
+                        continue;
+                    }
                 }
 
                 items.push(FileItem {
@@ -1247,12 +1249,14 @@ fn scan_recursive_helper_parallel(
                         )
                     };
 
-                    if follow_gitignore && is_path_ignored(&full_path, path) {
-                        return None;
-                    }
+                    if follow_gitignore {
+                        if is_path_ignored(&full_path, path) {
+                            return None;
+                        }
 
-                    if is_hidden {
-                        return None;
+                        if is_hidden {
+                            return None;
+                        }
                     }
 
                     if is_dir {
@@ -2222,9 +2226,11 @@ mod tests {
 
         assert!(names_without.iter().any(|n| n.contains("target")));
         assert!(names_without.iter().any(|n| n.contains("debug.log")));
+        assert!(names_without.iter().any(|n| n == ".gitignore"));
 
         assert!(!names_with.iter().any(|n| n.contains("target")));
         assert!(!names_with.iter().any(|n| n.contains("debug.log")));
+        assert!(!names_with.iter().any(|n| n == ".gitignore"));
         assert!(
             names_with.iter().any(|n| n == "src") || names_with.iter().any(|n| n.ends_with("src"))
         );
