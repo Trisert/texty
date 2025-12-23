@@ -711,11 +711,10 @@ impl FuzzySearchState {
 
         // Try instant backtrack from cache first
         if let Some(cached_results) = self.result_cache.get(&self.query) {
-            self.filtered_items = cached_results.clone();
-            self.result_count = self.filtered_items.len();
-            self.displayed_count = self.filtered_items.len().min(DEFAULT_DISPLAY_LIMIT); // Show first DEFAULT_DISPLAY_LIMIT
-            self.has_more_results = self.filtered_items.len() > DEFAULT_DISPLAY_LIMIT;
-            self.filtered_items.truncate(self.displayed_count);
+            self.result_count = cached_results.len();
+            self.displayed_count = self.result_count.min(DEFAULT_DISPLAY_LIMIT);
+            self.has_more_results = self.result_count > DEFAULT_DISPLAY_LIMIT;
+            self.filtered_items = cached_results[..self.displayed_count].to_vec();
             self.selected_index = 0;
             self.scroll_offset = 0;
         } else {
