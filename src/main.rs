@@ -10,6 +10,25 @@ use texty::{command::Command, editor::Editor, mode::Mode};
 // Global state for double space detection
 static mut LAST_SPACE_TIME: Option<Instant> = None;
 
+/// Application entry point: parse command-line arguments, initialize the terminal and editor state,
+/// open a file or directory if provided, run the main event loop, and restore the terminal on exit.
+///
+/// The function performs terminal setup (raw mode, alternate screen), constructs the UI renderer
+/// according to CLI flags or the `TEXTY_TERMINAL_PALETTE` environment variable, and drives input
+/// events until the editor requests shutdown. On exit it leaves the alternate screen and disables
+/// raw mode.
+///
+/// # Returns
+///
+/// `Ok(())` on normal shutdown, or an error if terminal setup, renderer creation, I/O, or event
+/// handling fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Run the application's async main from a synchronous context.
+/// tokio::runtime::Runtime::new().unwrap().block_on(crate::main()).unwrap();
+/// ```
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse command-line arguments first (before terminal setup)
@@ -47,7 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Initialize renderer
-    let mut renderer = TuiRenderer::new()?;
+    let use_terminal_palette = cli_args.terminal_palette
+        || std::env::var("TEXTY_TERMINAL_PALETTE")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
+    let mut renderer = TuiRenderer::new(use_terminal_palette, &cli_args.theme)?;
 
     // Basic event loop
     loop {

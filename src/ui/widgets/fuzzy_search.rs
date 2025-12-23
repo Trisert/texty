@@ -42,6 +42,26 @@ impl<'a> FuzzySearchWidget<'a> {
 }
 
 impl<'a> Widget for FuzzySearchWidget<'a> {
+    /// Renders the fuzzy search widget into the given terminal area.
+    ///
+    /// The widget draws a search input and a file list; when the available width is greater
+    /// than 80 and a preview buffer is available, it also draws a preview pane.
+    ///
+    /// When a preview is shown, the area is split horizontally into a left column (40%)
+    /// for the search input and file list and a right column (60%) for the preview. The
+    /// left column is further split vertically with a 3-line header and a flexible content
+    /// area. When no preview is shown, the full area is split vertically with the same
+    /// 3-line header and flexible content area.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ratatui::buffer::Buffer;
+    /// use ratatui::layout::Rect;
+    /// // let widget = FuzzySearchWidget::new(...);
+    /// // let mut buf = Buffer::empty(Rect::new(0,0,100,30));
+    /// // widget.render(Rect::new(0,0,100,30), &mut buf);
+    /// ```
     fn render(self, area: Rect, buf: &mut Buffer) {
         let block = Block::default().style(Style::default().bg(self.theme.ui.status_bar_bg));
         let inner_area = block.inner(area);
@@ -51,18 +71,12 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         if show_preview {
             let horizontal_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(60),
-                ])
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
                 .split(inner_area);
 
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),
-                    Constraint::Min(1),
-                ])
+                .constraints([Constraint::Length(3), Constraint::Min(1)])
                 .split(horizontal_chunks[0]);
 
             self.render_search_input(vertical_chunks[0], buf);
@@ -71,10 +85,7 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
         } else {
             let vertical_chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),
-                    Constraint::Min(1),
-                ])
+                .constraints([Constraint::Length(3), Constraint::Min(1)])
                 .split(inner_area);
 
             self.render_search_input(vertical_chunks[0], buf);

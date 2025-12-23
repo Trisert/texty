@@ -331,15 +331,24 @@ pub enum FileType {
 }
 
 impl FileType {
-    /// Get the bonus score for this file type
+    /// Provide the priority bonus for this file type.
+    ///
+    /// The bonus influences search ranking: positive values increase priority, negative values decrease it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(crate::FileType::Source.bonus_score(), 500);
+    /// assert_eq!(crate::FileType::Binary.bonus_score(), -100);
+    /// ```
     pub fn bonus_score(&self) -> i32 {
         match self {
-            FileType::Source => 200,
-            FileType::Test => 100,
+            FileType::Source => 500,
+            FileType::Test => 250,
             FileType::Documentation => 0,
-            FileType::Configuration => 50,
-            FileType::Build => 25,
-            FileType::Binary => -50, // Penalize binary files
+            FileType::Configuration => 150,
+            FileType::Build => 75,
+            FileType::Binary => -100, // Penalize binary files
             FileType::Other => 0,
         }
     }
@@ -588,7 +597,22 @@ impl FuzzySearchState {
         }
     }
 
-    /// Update query with full history backtracking support and early termination
+    /// Update the current search query, adjust cached or recomputed results, and refresh the preview.
+    ///
+    /// This saves the previous non-empty query to the state's backtracking history, attempts to load
+    /// matching results from the result cache, and if absent either performs an early-termination
+    /// filtered scan or rescans the current directory. After updating the filtered result list it
+    /// resets selection/scrolling state, sets display counts and pagination flags, and refreshes the
+    /// preview buffer for the new selection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut state = FuzzySearchState::new(); // starts with default path and empty query
+    /// state.update_query("main".to_string());
+    /// assert_eq!(state.query, "main");
+    /// // filtered_items, displayed_count, and current_preview are updated by the call
+    /// ```
     pub fn update_query(&mut self, new_query: String) {
         let old_query = self.query.clone();
         self.query = new_query.clone();
@@ -615,6 +639,8 @@ impl FuzzySearchState {
                 self.rescan_current_directory();
             }
         }
+
+        self.update_preview();
     }
 
     /// Determine if we should use early termination optimization
@@ -1595,17 +1621,19 @@ mod tests {
     fn test_display_limit_constant() {
         // Verify that DEFAULT_DISPLAY_LIMIT is used consistently
         assert_eq!(DEFAULT_DISPLAY_LIMIT, 100);
-        
+
         // Test that results are limited correctly
-        let items: Vec<FileItem> = (0..150).map(|i| FileItem {
-            name: format!("file_{}.rs", i),
-            path: PathBuf::from(format!("src/file_{}.rs", i)),
-            is_dir: false,
-            is_hidden: false,
-            modified: SystemTime::UNIX_EPOCH,
-            size: Some(i as u64),
-            is_binary: false,
-        }).collect();
+        let items: Vec<FileItem> = (0..150)
+            .map(|i| FileItem {
+                name: format!("file_{}.rs", i),
+                path: PathBuf::from(format!("src/file_{}.rs", i)),
+                is_dir: false,
+                is_hidden: false,
+                modified: SystemTime::UNIX_EPOCH,
+                size: Some(i as u64),
+                is_binary: false,
+            })
+            .collect();
 
         let mut state = FuzzySearchState::new();
         state.all_items = items;
@@ -1872,12 +1900,12 @@ mod tests {
 
     #[test]
     fn test_file_type_bonuses() {
-        assert_eq!(FileType::Source.bonus_score(), 200);
-        assert_eq!(FileType::Test.bonus_score(), 100);
+        assert_eq!(FileType::Source.bonus_score(), 500);
+        assert_eq!(FileType::Test.bonus_score(), 250);
         assert_eq!(FileType::Documentation.bonus_score(), 0);
-        assert_eq!(FileType::Configuration.bonus_score(), 50);
-        assert_eq!(FileType::Build.bonus_score(), 25);
-        assert_eq!(FileType::Binary.bonus_score(), -50);
+        assert_eq!(FileType::Configuration.bonus_score(), 150);
+        assert_eq!(FileType::Build.bonus_score(), 75);
+        assert_eq!(FileType::Binary.bonus_score(), -100);
         assert_eq!(FileType::Other.bonus_score(), 0);
     }
 }

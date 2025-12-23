@@ -330,7 +330,10 @@ fn test_ui_widgets() {
     let _completion_popup = texty::ui::widgets::completion::CompletionPopup::new();
 
     // Test theme color methods
-    assert_eq!(theme.syntax_color("keyword"), ratatui::style::Color::Cyan);
+    assert_eq!(
+        theme.syntax_color("keyword"),
+        ratatui::style::Color::Rgb(255, 121, 198)
+    );
 }
 
 #[test]

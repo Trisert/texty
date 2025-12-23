@@ -8,6 +8,14 @@ use std::path::PathBuf;
 pub struct CliArgs {
     /// File or directory to open
     pub file: Option<PathBuf>,
+
+    /// Use terminal color palette instead of theme colors
+    #[arg(long, short = 't')]
+    pub terminal_palette: bool,
+
+    /// Syntax theme to use (default or monokai)
+    #[arg(long, short = 'T', default_value_t = String::from("default"))]
+    pub theme: String,
 }
 
 impl CliArgs {
@@ -50,46 +58,58 @@ mod tests {
 
     #[test]
     fn test_parse_no_args() {
-        // This test would require mocking argv, skipping for now
-        // In real usage, this would test parsing with no arguments
+        let args = CliArgs::parse_from(&["texty"]);
+        assert!(args.file.is_none());
+        assert_eq!(args.theme, "default");
     }
 
+    /// Confirms that the `--theme` CLI option sets the `theme` field to the provided value.
+    ///
+    /// Parses a simulated command-line containing `--theme monokai` and asserts that the
+    /// resulting `CliArgs.theme` equals `"monokai"`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = CliArgs::parse_from(&["texty", "--theme", "monokai"]);
+    /// assert_eq!(args.theme, "monokai");
+    /// ```
     #[test]
-    fn test_parse_with_file() {
-        // This would test parsing with a file argument
-        // Implementation would require process control
+    fn test_parse_with_theme() {
+        let args = CliArgs::parse_from(&["texty", "--theme", "monokai"]);
+        assert_eq!(args.theme, "monokai");
     }
 
     #[test]
     fn test_directory_detection() {
-        // Create temporary directory
         let temp_dir = TempDir::new().unwrap();
         let dir_path = temp_dir.path();
 
-        // Create a temporary file
         let file_path = dir_path.join("test_file.txt");
         fs::write(&file_path, "test content").unwrap();
 
         let file_args = CliArgs {
             file: Some(file_path.clone()),
+            terminal_palette: false,
+            theme: "default".to_string(),
         };
 
         let dir_args = CliArgs {
             file: Some(dir_path.to_path_buf()),
+            terminal_palette: false,
+            theme: "default".to_string(),
         };
 
-        // Test file detection
-        assert!(file_args.exists());
-        assert!(!file_args.is_directory());
-
-        // Test directory detection
-        assert!(dir_args.exists());
-        assert!(dir_args.is_directory());
-
-        // Test non-existent path
         let nonexistent_args = CliArgs {
             file: Some(PathBuf::from("/nonexistent/path")),
+            terminal_palette: false,
+            theme: "default".to_string(),
         };
+
+        assert!(file_args.exists());
+        assert!(!file_args.is_directory());
+        assert!(dir_args.exists());
+        assert!(dir_args.is_directory());
         assert!(!nonexistent_args.exists());
         assert!(!nonexistent_args.is_directory());
     }
