@@ -485,21 +485,26 @@ fn recency_bonus(modified: &SystemTime) -> i32 {
 
     let seconds = duration.as_secs();
 
-    // High bonus for recently modified files
     if seconds < 3600 {
         // Modified within last hour
-        1000 - (seconds as i32 / 36) // 1000 down to 0 over 1 hour
+        let ratio = seconds as f64 / 3600.0;
+        (1000.0 * (1.0 - ratio)).round() as i32
     } else if seconds < 86400 {
         // Modified within last day
-        500 - ((seconds - 3600) as i32 / 82800) // 500 down to 0 over 23 hours
+        let elapsed = (seconds - 3600) as f64;
+        let ratio = elapsed / 82800.0;
+        (500.0 * (1.0 - ratio)).round() as i32
+    } else if seconds < 604800 {
+        // Modified within last week (7 days)
+        let elapsed = (seconds - 86400) as f64;
+        let ratio = elapsed / 518400.0;
+        (200.0 * (1.0 - ratio)).round() as i32
     } else if seconds < 2592000 {
-        // Modified within last week
-        200 - ((seconds - 86400) as i32 / 604800) // 200 down to 0 over 6 days
-    } else if seconds < 7776000 {
-        // Modified within last month
-        50 - ((seconds - 2592000) as i32 / 1814400) // 50 down to 0 over 25 days
+        // Modified within last month (30 days)
+        let elapsed = (seconds - 604800) as f64;
+        let ratio = elapsed / 1987200.0;
+        (50.0 * (1.0 - ratio)).round() as i32
     } else {
-        // Modified more than a month ago
         0
     }
 }
@@ -535,7 +540,7 @@ fn important_name_bonus(filename: &str) -> i32 {
             | "tsconfig.json"
             | "webpack.config.js"
             | "vite.config.js"
-            | "Makefile"
+            | "makefile"
             | "dockerfile"
             | "docker-compose.yml"
             | ".gitignore"
@@ -544,12 +549,12 @@ fn important_name_bonus(filename: &str) -> i32 {
     }
 
     // Test files (medium priority)
-    if filename_lower.starts_with("test_")
+    let is_test_file = filename_lower.starts_with("test_")
         || filename_lower.ends_with("_test")
         || filename_lower.contains(".test.")
         || filename_lower.ends_with("_spec")
-        || filename_lower.contains("spec.")
-    {
+        || filename_lower.contains("spec.");
+    if is_test_file {
         return 100;
     }
 
@@ -706,11 +711,10 @@ impl FuzzySearchState {
 
         // Try instant backtrack from cache first
         if let Some(cached_results) = self.result_cache.get(&self.query) {
-            self.filtered_items = cached_results.clone();
-            self.result_count = self.filtered_items.len();
-            self.displayed_count = self.filtered_items.len().min(DEFAULT_DISPLAY_LIMIT); // Show first DEFAULT_DISPLAY_LIMIT
-            self.has_more_results = self.filtered_items.len() > DEFAULT_DISPLAY_LIMIT;
-            self.filtered_items.truncate(self.displayed_count);
+            self.result_count = cached_results.len();
+            self.displayed_count = self.result_count.min(DEFAULT_DISPLAY_LIMIT);
+            self.has_more_results = self.result_count > DEFAULT_DISPLAY_LIMIT;
+            self.filtered_items = cached_results[..self.displayed_count].to_vec();
             self.selected_index = 0;
             self.scroll_offset = 0;
         } else {
@@ -1046,8 +1050,8 @@ impl FuzzySearchState {
             if !selected_item.is_dir {
                 if let Some(mut cached) = self.preview_cache.get(&selected_item.path) {
                     cached.ensure_highlighted(0, 100);
-                    self.preview_cache.put(selected_item.path.clone(), cached);
-                    self.current_preview = self.preview_cache.get(&selected_item.path);
+                    self.preview_cache.put(selected_item.path.clone(), cached.clone());
+                    self.current_preview = Some(cached);
                     return;
                 }
 
@@ -2006,5 +2010,147 @@ mod tests {
         assert_eq!(FileType::Build.bonus_score(), 75);
         assert_eq!(FileType::Binary.bonus_score(), -100);
         assert_eq!(FileType::Other.bonus_score(), 0);
+    }
+
+    #[test]
+    fn test_recency_bonus_now() {
+        let now = SystemTime::now();
+        let bonus = recency_bonus(&now);
+        assert_eq!(bonus, 1000);
+    }
+
+    #[test]
+    fn test_recency_bonus_half_hour() {
+        let now = SystemTime::now();
+        let half_hour_ago = now - std::time::Duration::from_secs(1800);
+        let bonus = recency_bonus(&half_hour_ago);
+        assert_eq!(bonus, 500);
+    }
+
+    #[test]
+    fn test_recency_bonus_twelve_hours() {
+        let now = SystemTime::now();
+        let twelve_hours_ago = now - std::time::Duration::from_secs(43200);
+        let bonus = recency_bonus(&twelve_hours_ago);
+        assert!(bonus > 200 && bonus < 500);
+    }
+
+    #[test]
+    fn test_recency_bonus_two_hours() {
+        let now = SystemTime::now();
+        let two_hours_ago = now - std::time::Duration::from_secs(7200);
+        let bonus = recency_bonus(&two_hours_ago);
+        assert!(bonus >= 0 && bonus < 500);
+    }
+
+    #[test]
+    fn test_recency_bonus_old_file() {
+        let now = SystemTime::now();
+        let old_file = now - std::time::Duration::from_secs(2592001);
+        let bonus = recency_bonus(&old_file);
+        assert_eq!(bonus, 0);
+    }
+
+    #[test]
+    fn test_recency_bonus_one_day() {
+        let now = SystemTime::now();
+        let one_day_ago = now - std::time::Duration::from_secs(43200);
+        let bonus = recency_bonus(&one_day_ago);
+        assert!(bonus > 0);
+    }
+
+    #[test]
+    fn test_recency_bonus_one_week() {
+        let now = SystemTime::now();
+        let one_week_ago = now - std::time::Duration::from_secs(302400);
+        let bonus = recency_bonus(&one_week_ago);
+        assert!(bonus > 0);
+    }
+
+    #[test]
+    fn test_recency_bonus_one_month() {
+        let now = SystemTime::now();
+        let one_month_ago = now - std::time::Duration::from_secs(1296000);
+        let bonus = recency_bonus(&one_month_ago);
+        assert!(bonus > 0);
+    }
+
+    #[test]
+    fn test_important_name_bonus_main_files() {
+        assert_eq!(important_name_bonus("main.rs"), 300);
+        assert_eq!(important_name_bonus("main.js"), 300);
+        assert_eq!(important_name_bonus("main.ts"), 300);
+        assert_eq!(important_name_bonus("main.py"), 300);
+        assert_eq!(important_name_bonus("main.go"), 300);
+        assert_eq!(important_name_bonus("main.java"), 300);
+        assert_eq!(important_name_bonus("lib.rs"), 300);
+        assert_eq!(important_name_bonus("index.js"), 300);
+        assert_eq!(important_name_bonus("index.ts"), 300);
+        assert_eq!(important_name_bonus("index.html"), 300);
+    }
+
+    #[test]
+    fn test_important_name_bonus_case_insensitive() {
+        assert_eq!(important_name_bonus("Main.rs"), 300);
+        assert_eq!(important_name_bonus("MAIN.RS"), 300);
+        assert_eq!(important_name_bonus("Cargo.toml"), 200);
+        assert_eq!(important_name_bonus("CARGO.TOML"), 200);
+    }
+
+    #[test]
+    fn test_important_name_bonus_makefile() {
+        assert_eq!(important_name_bonus("makefile"), 200);
+        assert_eq!(important_name_bonus("Makefile"), 200);
+        assert_eq!(important_name_bonus("MAKEFILE"), 200);
+    }
+
+    #[test]
+    fn test_important_name_bonus_build_files() {
+        assert_eq!(important_name_bonus("cargo.toml"), 200);
+        assert_eq!(important_name_bonus("cargo.lock"), 200);
+        assert_eq!(important_name_bonus("package.json"), 200);
+        assert_eq!(important_name_bonus("tsconfig.json"), 200);
+        assert_eq!(important_name_bonus("Makefile"), 200);
+        assert_eq!(important_name_bonus("dockerfile"), 200);
+        assert_eq!(important_name_bonus("docker-compose.yml"), 200);
+        assert_eq!(important_name_bonus(".gitignore"), 200);
+    }
+
+    #[test]
+    fn test_important_name_bonus_test_files() {
+        assert_eq!(important_name_bonus("main.test.rs"), 100);
+        assert_eq!(important_name_bonus("main_spec.rs"), 100);
+        assert_eq!(important_name_bonus("main.spec.rs"), 100);
+    }
+
+    #[test]
+    fn test_important_name_bonus_regular_file() {
+        assert_eq!(important_name_bonus("regular.rs"), 0);
+        assert_eq!(important_name_bonus("utils.ts"), 0);
+        assert_eq!(important_name_bonus("data.json"), 0);
+    }
+
+    #[test]
+    fn test_recency_bonus_mid_hour() {
+        let now = SystemTime::now();
+        let mid_hour_ago = now - std::time::Duration::from_secs(2700);
+        let bonus = recency_bonus(&mid_hour_ago);
+        assert!(bonus > 0 && bonus < 1000);
+    }
+
+    #[test]
+    fn test_recency_bonus_mid_day() {
+        let now = SystemTime::now();
+        let mid_day_ago = now - std::time::Duration::from_secs(45000);
+        let bonus = recency_bonus(&mid_day_ago);
+        assert!(bonus > 0 && bonus < 500);
+    }
+
+    #[test]
+    fn test_recency_bonus_mid_week() {
+        let now = SystemTime::now();
+        let mid_week_ago = now - std::time::Duration::from_secs(345600);
+        let bonus = recency_bonus(&mid_week_ago);
+        assert!(bonus > 0 && bonus < 200);
     }
 }

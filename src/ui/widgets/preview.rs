@@ -123,14 +123,14 @@ impl PreviewBuffer {
 #[derive(Debug)]
 pub struct PreviewCache {
     cache: LruCache<PathBuf, PreviewBuffer>,
-    max_size: usize,
 }
 
 impl PreviewCache {
     pub fn new(max_size: usize) -> Self {
+        let size = std::num::NonZeroUsize::new(max_size)
+            .unwrap_or(std::num::NonZeroUsize::new(1).unwrap());
         Self {
-            cache: LruCache::new(std::num::NonZeroUsize::new(max_size).unwrap()),
-            max_size,
+            cache: LruCache::new(size),
         }
     }
 
