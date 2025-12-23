@@ -63,6 +63,17 @@ mod tests {
         assert_eq!(args.theme, "default");
     }
 
+    /// Confirms that the `--theme` CLI option sets the `theme` field to the provided value.
+    ///
+    /// Parses a simulated command-line containing `--theme monokai` and asserts that the
+    /// resulting `CliArgs.theme` equals `"monokai"`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = CliArgs::parse_from(&["texty", "--theme", "monokai"]);
+    /// assert_eq!(args.theme, "monokai");
+    /// ```
     #[test]
     fn test_parse_with_theme() {
         let args = CliArgs::parse_from(&["texty", "--theme", "monokai"]);

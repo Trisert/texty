@@ -24,7 +24,26 @@ pub struct TuiRenderer {
 }
 
 impl TuiRenderer {
-    /// Create a new TuiRenderer
+    /// Constructs a TuiRenderer initialized with a Crossterm terminal and the chosen theme.
+    ///
+    /// The theme is either created from the terminal palette when `use_terminal_palette` is true,
+    /// or from the default theme otherwise. Additionally, this attempts to load a syntax theme
+    /// from `runtime/themes/{theme_name}.toml` and attaches it to the renderer if present.
+    ///
+    /// # Arguments
+    ///
+    /// * `use_terminal_palette` - If true, build the theme using the terminal's palette.
+    /// * `theme_name` - Base name of a runtime syntax theme (without extension) to load from `runtime/themes/`.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(TuiRenderer)` with an initialized terminal and theme on success, or an error if terminal creation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let renderer = TuiRenderer::new(false, "default").unwrap();
+    /// ```
     pub fn new(
         use_terminal_palette: bool,
         theme_name: &str,
@@ -45,7 +64,30 @@ impl TuiRenderer {
         Ok(Self { terminal, theme })
     }
 
-    /// Draw the editor UI
+    /// Render the entire editor user interface into the terminal.
+    ///
+    /// This draws the main editor content (gutter and text), the status bar, the fuzzy-search
+    /// UI when active (either full-screen preview or split view), and any overlays such as
+    /// hover windows and code-action menus. The function also clears the terminal buffer to
+    /// avoid visual artifacts and positions the cursor when the editor view is visible.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if terminal drawing or widget rendering fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::error::Error;
+    /// # use mycrate::ui::TuiRenderer;
+    /// # use mycrate::editor::Editor;
+    /// # fn demo() -> Result<(), Box<dyn Error>> {
+    /// let mut renderer = TuiRenderer::new(false, "default")?;
+    /// let mut editor = Editor::default();
+    /// renderer.draw(&mut editor)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn draw(&mut self, editor: &mut Editor) -> Result<(), Box<dyn std::error::Error>> {
         self.terminal.draw(|f| {
             let size = f.size();

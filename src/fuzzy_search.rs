@@ -331,7 +331,16 @@ pub enum FileType {
 }
 
 impl FileType {
-    /// Get the bonus score for this file type
+    /// Provide the priority bonus for this file type.
+    ///
+    /// The bonus influences search ranking: positive values increase priority, negative values decrease it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(crate::FileType::Source.bonus_score(), 500);
+    /// assert_eq!(crate::FileType::Binary.bonus_score(), -100);
+    /// ```
     pub fn bonus_score(&self) -> i32 {
         match self {
             FileType::Source => 500,
@@ -588,7 +597,22 @@ impl FuzzySearchState {
         }
     }
 
-    /// Update query with full history backtracking support and early termination
+    /// Update the current search query, adjust cached or recomputed results, and refresh the preview.
+    ///
+    /// This saves the previous non-empty query to the state's backtracking history, attempts to load
+    /// matching results from the result cache, and if absent either performs an early-termination
+    /// filtered scan or rescans the current directory. After updating the filtered result list it
+    /// resets selection/scrolling state, sets display counts and pagination flags, and refreshes the
+    /// preview buffer for the new selection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut state = FuzzySearchState::new(); // starts with default path and empty query
+    /// state.update_query("main".to_string());
+    /// assert_eq!(state.query, "main");
+    /// // filtered_items, displayed_count, and current_preview are updated by the call
+    /// ```
     pub fn update_query(&mut self, new_query: String) {
         let old_query = self.query.clone();
         self.query = new_query.clone();

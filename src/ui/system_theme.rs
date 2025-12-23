@@ -45,6 +45,14 @@ pub struct TerminalPalette {
 }
 
 impl Default for TerminalPalette {
+    /// Creates a terminal palette configured for 16-color (Basic16) terminals.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let palette = TerminalPalette::default();
+    /// assert_eq!(palette.capability, TerminalCapability::Basic16);
+    /// ```
     fn default() -> Self {
         Self::new(TerminalCapability::Basic16)
     }
@@ -65,6 +73,17 @@ pub struct SyntaxPaletteColors {
 }
 
 impl TerminalPalette {
+    /// Creates a terminal color palette populated with standard ANSI color mappings for the specified capability.
+    ///
+    /// The palette is initialized with the conventional 8 colors and their bright variants; `background` and `foreground` are left unset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let palette = TerminalPalette::new(TerminalCapability::Basic16);
+    /// assert_eq!(palette.black, Color::Black);
+    /// assert!(palette.background.is_none());
+    /// ```
     pub fn new(capability: TerminalCapability) -> Self {
         Self {
             capability,
@@ -89,6 +108,18 @@ impl TerminalPalette {
         }
     }
 
+    /// Map this terminal palette to a set of colors used for syntax highlighting.
+    ///
+    /// The returned `SyntaxPaletteColors` picks bright variants for most syntax kinds,
+    /// and falls back to the palette's foreground (or white) for variable and punctuation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let palette = TerminalPalette::new(TerminalCapability::Basic16);
+    /// let syntax = palette.get_syntax_colors();
+    /// assert_eq!(syntax.keyword, palette.bright_magenta);
+    /// ```
     pub fn get_syntax_colors(&self) -> SyntaxPaletteColors {
         SyntaxPaletteColors {
             keyword: self.bright_magenta,
@@ -103,6 +134,19 @@ impl TerminalPalette {
         }
     }
 
+    /// Detects the terminal palette to use based on the environment and terminal capabilities.
+    ///
+    /// This inspects the detected terminal color capability and, when TrueColor is available,
+    /// attempts to query the terminal's OSC color palette; otherwise it returns a default
+    /// palette for the detected capability.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let palette = ui::system_theme::TerminalPalette::detect();
+    /// // palette.capability reflects the detected TerminalCapability
+    /// ```
+    —
     pub fn detect() -> Self {
         let capability = detect_terminal_capability();
 
@@ -120,7 +164,29 @@ impl TerminalPalette {
     }
 }
 
-/// Get system theme preference
+/// Detects the user's preferred system theme.
+///
+/// The function checks environment hints (COLORFGBG, DARK_MODE, and TERM) to determine
+/// whether the system or terminal prefers a light or dark appearance. If an explicit
+/// preference is present but not recognized, `SystemTheme::Unknown` is returned. When
+/// no hint is available, the function returns `SystemTheme::Dark`.
+///
+/// # Returns
+///
+/// `SystemTheme::Light` if a light preference is detected, `SystemTheme::Dark` if a dark
+/// preference is detected, `SystemTheme::Unknown` if a preference string is present but
+/// not recognized; defaults to `SystemTheme::Dark` when no environment hints are found.
+///
+/// # Examples
+///
+/// ```
+/// let theme = detect_system_theme();
+/// match theme {
+///     SystemTheme::Light => println!("Light theme preferred"),
+///     SystemTheme::Dark => println!("Dark theme preferred"),
+///     SystemTheme::Unknown => println!("Theme preference unknown"),
+/// }
+/// ```
 pub fn detect_system_theme() -> SystemTheme {
     // Try environment variables first
     if let Ok(theme) = std::env::var("COLORFGBG") {
@@ -150,7 +216,28 @@ pub fn detect_system_theme() -> SystemTheme {
     SystemTheme::Dark
 }
 
-/// Detect terminal color capability
+/// Determine the terminal's color capability from environment variables.
+///
+/// The detection checks `COLORTERM`, `TERM`, and `NO_COLOR` for hints and
+/// returns the most specific supported capability found.
+///
+/// # Returns
+///
+/// The detected `TerminalCapability`: `NoColor`, `Basic16`, `Color256`, or `TrueColor`.
+///
+/// # Examples
+///
+/// ```
+/// use std::env;
+/// // TrueColor via COLORTERM
+/// env::set_var("COLORTERM", "truecolor");
+/// assert_eq!(crate::ui::system_theme::detect_terminal_capability(), crate::ui::system_theme::TerminalCapability::TrueColor);
+///
+/// // 256 colors via TERM
+/// env::set_var("COLORTERM", "");
+/// env::set_var("TERM", "xterm-256color");
+/// assert_eq!(crate::ui::system_theme::detect_terminal_capability(), crate::ui::system_theme::TerminalCapability::Color256);
+/// ```
 pub fn detect_terminal_capability() -> TerminalCapability {
     if let Ok(colorterm) = std::env::var("COLORTERM") {
         if colorterm.contains("truecolor") || colorterm.contains("24bit") {
@@ -180,7 +267,21 @@ pub fn detect_terminal_capability() -> TerminalCapability {
     TerminalCapability::Color256
 }
 
-/// Query terminal for color palette using OSC sequences
+/// Queries the terminal for its ANSI and special (foreground/background) colors using OSC sequences and constructs a TerminalPalette from any successfully retrieved values.
+///
+/// The returned palette will contain any colors the terminal responded with; fields for colors that were not returned remain at their initialized defaults. The function wraps the resulting palette in `Some` (the returned `Option` may contain a palette with no gathered responses).
+///
+/// # Examples
+///
+/// ```
+/// // Attempt to read the terminal palette; callers should handle environments
+/// // where the terminal does not support OSC queries or where stdin/stdout are not connected.
+/// if let Some(palette) = query_terminal_palette() {
+///     let syntax = palette.get_syntax_colors();
+///     // use `syntax` or `palette` as needed
+///     let _ = syntax.keyword;
+/// }
+/// ```
 fn query_terminal_palette() -> Option<TerminalPalette> {
     let mut palette = TerminalPalette::new(TerminalCapability::TrueColor);
 
@@ -240,7 +341,19 @@ fn query_terminal_palette() -> Option<TerminalPalette> {
     Some(palette)
 }
 
-/// Query terminal for a specific color index using OSC 4
+/// Query the terminal's ANSI color for the given color index using OSC 4.
+///
+/// Attempts to write an OSC 4 query for `color_index` to stdout, flush the output,
+/// and read a color reply. If the terminal responds with an RGB value the function
+/// returns `Some((r, g, b))`; otherwise it returns `None`.
+///
+/// # Examples
+///
+/// ```
+/// // Asking for ANSI color 1 (usually red); may return `None` if the terminal
+/// // does not support OSC queries or does not reply.
+/// let _maybe_color = query_terminal_color(1);
+/// ```
 fn query_terminal_color(color_index: usize) -> Option<(u8, u8, u8)> {
     let mut query = Vec::new();
     query.extend_from_slice(&[0x1b, b']']);
@@ -258,7 +371,25 @@ fn query_terminal_color(color_index: usize) -> Option<(u8, u8, u8)> {
     read_osc_response()
 }
 
-/// Query terminal for background (10) or foreground (11) color
+/// Queries the terminal for a special OSC color (background or foreground).
+///
+/// # Parameters
+///
+/// - `color_id`: OSC color identifier to query (commonly `10` for background, `11` for foreground).
+///
+/// # Returns
+///
+/// `Some((r, g, b))` containing the color's 8-bit RGB components if the terminal responded and the response was parsed successfully, `None` otherwise.
+///
+/// # Examples
+///
+/// ```
+/// // Query the background color (10)
+/// if let Some((r, g, b)) = query_terminal_special_color(10) {
+///     // use r, g, b
+///     println!("background color: {} {} {}", r, g, b);
+/// }
+/// ```
 fn query_terminal_special_color(color_id: usize) -> Option<(u8, u8, u8)> {
     let mut query = Vec::new();
     query.extend_from_slice(&[0x1b, b']']);
@@ -276,7 +407,23 @@ fn query_terminal_special_color(color_id: usize) -> Option<(u8, u8, u8)> {
     read_osc_response()
 }
 
-/// Read OSC response from terminal
+/// Attempts to read an OSC color response from stdin and parse it into an RGB triple.
+///
+/// Reads up to 1024 bytes from the standard input, interprets the bytes as an OSC color response,
+/// and returns the parsed `(r, g, b)` values if parsing succeeds.
+///
+/// # Returns
+///
+/// `Some((r, g, b))` when a valid RGB triplet is parsed from the OSC response, `None` otherwise.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Reads from the current process's stdin; may block if no data is available.
+/// if let Some((r, g, b)) = read_osc_response() {
+///     println!("Detected color: #{:02X}{:02X}{:02X}", r, g, b);
+/// }
+/// ```
 fn read_osc_response() -> Option<(u8, u8, u8)> {
     let stdin = io::stdin();
     let mut stdin_handle = stdin.lock();
@@ -289,7 +436,19 @@ fn read_osc_response() -> Option<(u8, u8, u8)> {
     parse_osc_color_response(&response)
 }
 
-/// Parse OSC color response
+/// Extracts an RGB triplet from a terminal OSC color response string.
+///
+/// Recognizes OSC color responses that begin with an OSC introducer (ESC `]` or ST `]`)
+/// and contain semicolon-separated fields including RGB components. Accepts numeric RGB
+/// values in decimal form and values prefixed with `rgb:` and/or terminated with `/`.
+/// Returns `Some((r, g, b))` when three valid 0–255 components are found, `None` otherwise.
+///
+/// # Examples
+///
+/// ```
+/// let resp = "\x1b]4;0;rgb:12/34/56\x1b\\";
+/// assert_eq!(parse_osc_color_response(resp), Some((12, 34, 56)));
+/// ```
 fn parse_osc_color_response(response: &str) -> Option<(u8, u8, u8)> {
     let response = response.trim();
 
@@ -356,6 +515,14 @@ pub struct ThemeColors {
 }
 
 impl Default for ThemeColors {
+    /// Uses the dark theme as the default ThemeColors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let theme = ThemeColors::default();
+    /// assert_eq!(theme.background, ThemeColors::dark().background);
+    /// ```
     fn default() -> Self {
         // Default to dark theme for better compatibility
         Self::dark()
@@ -363,7 +530,18 @@ impl Default for ThemeColors {
 }
 
 impl ThemeColors {
-    /// Dark theme colors (high contrast)
+    /// A high-contrast dark color scheme for UI components.
+    ///
+    /// Provides predefined colors for background, foreground, syntax categories, cursor,
+    /// status bar, gutter, and diagnostics optimized for dark backgrounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let theme = ThemeColors::dark();
+    /// assert_eq!(theme.background, Color::Black);
+    /// assert!(matches!(theme.foreground, Color::Rgb(r, g, b) if r > 200 && g > 200 && b > 200));
+    /// ```
     pub fn dark() -> Self {
         Self {
             background: Color::Black,
@@ -386,7 +564,19 @@ impl ThemeColors {
         }
     }
 
-    /// Light theme colors (high contrast)
+    /// Returns a high-contrast light UI color theme.
+    ///
+    /// The theme uses a white background with dark foreground and distinct colors for
+    /// syntax kinds, UI chrome, and diagnostics suited for light backgrounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let theme = ThemeColors::light();
+    /// assert_eq!(theme.background, Color::White);
+    /// assert_eq!(theme.foreground, Color::Black);
+    /// assert_eq!(theme.string, Color::Rgb(163, 21, 21));
+    /// ```
     pub fn light() -> Self {
         Self {
             background: Color::White,
