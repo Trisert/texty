@@ -134,19 +134,6 @@ impl TerminalPalette {
         }
     }
 
-    /// Detects the terminal palette to use based on the environment and terminal capabilities.
-    ///
-    /// This inspects the detected terminal color capability and, when TrueColor is available,
-    /// attempts to query the terminal's OSC color palette; otherwise it returns a default
-    /// palette for the detected capability.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let palette = ui::system_theme::TerminalPalette::detect();
-    /// // palette.capability reflects the detected TerminalCapability
-    /// ```
-    —
     pub fn detect() -> Self {
         let capability = detect_terminal_capability();
 

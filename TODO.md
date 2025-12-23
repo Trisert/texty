@@ -1,10 +1,5 @@
 # Texty Development Todo
 
-## Laggy Preview when Moving Around with Keys
-- Fix fuzzy preview rendering performance
-- Optimize preview loading when navigating through results with arrow keys
-- Reduce rendering artifacts during quick navigation
-
 ## Sorting When Fuzzy Search is Just Opened
 - Review file sorting algorithm when fuzzy search first opens
 - Ensure files are in optimal order (filename match, recency, type priority)
