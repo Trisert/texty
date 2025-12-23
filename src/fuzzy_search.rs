@@ -1051,8 +1051,8 @@ impl FuzzySearchState {
             if !selected_item.is_dir {
                 if let Some(mut cached) = self.preview_cache.get(&selected_item.path) {
                     cached.ensure_highlighted(0, 100);
-                    self.preview_cache.put(selected_item.path.clone(), cached);
-                    self.current_preview = self.preview_cache.get(&selected_item.path);
+                    self.preview_cache.put(selected_item.path.clone(), cached.clone());
+                    self.current_preview = Some(cached);
                     return;
                 }
 
@@ -2037,10 +2037,10 @@ mod tests {
     }
 
     #[test]
-    fn test_recency_bonus_one_hour() {
+    fn test_recency_bonus_two_hours() {
         let now = SystemTime::now();
-        let one_hour_ago = now - std::time::Duration::from_secs(7200);
-        let bonus = recency_bonus(&one_hour_ago);
+        let two_hours_ago = now - std::time::Duration::from_secs(7200);
+        let bonus = recency_bonus(&two_hours_ago);
         assert!(bonus >= 0 && bonus < 500);
     }
 

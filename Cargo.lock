@@ -789,6 +789,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
+dependencies = [
+ "hashbrown 0.15.5",
+]
+
+[[package]]
 name = "lsp-server"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1148,7 +1157,7 @@ dependencies = [
  "compact_str",
  "crossterm",
  "itertools 0.12.1",
- "lru",
+ "lru 0.12.5",
  "paste",
  "stability",
  "strum",
@@ -1490,7 +1499,7 @@ dependencies = [
  "clap",
  "crossterm",
  "futures",
- "lru",
+ "lru 0.14.0",
  "lsp-server",
  "lsp-types",
  "proptest",
