@@ -51,8 +51,12 @@ fn create_gitignore(root: &Path) -> Option<ignore::gitignore::Gitignore> {
     Some(gitignore)
 }
 
-fn is_path_ignored(path: &Path, root: &Path) -> bool {
-    if let Some(gitignore) = create_gitignore(root) {
+fn is_path_ignored(
+    path: &Path,
+    root: &Path,
+    gitignore: &Option<ignore::gitignore::Gitignore>,
+) -> bool {
+    if let Some(gitignore) = gitignore {
         let stripped = path.strip_prefix(root).unwrap_or(path);
         let is_dir = path.is_dir();
         gitignore.matched(stripped, is_dir).is_ignore()
@@ -1071,6 +1075,18 @@ impl FuzzySearchState {
         self.rescan_current_directory();
     }
 
+    /// Toggle gitignore filtering on or off.
+    ///
+    /// When enabled, files and directories matching patterns in `.gitignore` are excluded from search results.
+    /// Toggling clears the result cache and triggers a directory rescan.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut state = FuzzySearchState::new();
+    /// state.toggle_gitignore(); // Disable gitignore filtering
+    /// state.toggle_gitignore(); // Re-enable gitignore filtering
+    /// ```
     pub fn toggle_gitignore(&mut self) {
         self.follow_gitignore = !self.follow_gitignore;
         self.result_cache.clear();
@@ -1108,22 +1124,26 @@ impl FuzzySearchState {
     }
 }
 
-/// Scan a directory and return all files and directories
+/// Scan a directory and return all files and directories.
+///
+/// # Arguments
+///
+/// * `path` - The directory path to scan
+/// * `follow_gitignore` - If true, exclude files matching patterns in `.gitignore` and hidden files
+///
+/// # Examples
+///
+/// ```
+/// let items = scan_directory(&PathBuf::from("."), true);
+/// ```
 pub fn scan_directory(path: &PathBuf, follow_gitignore: bool) -> Vec<FileItem> {
     let mut items = Vec::new();
 
-    // Add parent directory entry
-    if let Some(parent) = path.parent() {
-        items.push(FileItem {
-            name: "..".to_string(),
-            path: parent.to_path_buf(),
-            is_dir: true,
-            is_hidden: false,
-            modified: SystemTime::UNIX_EPOCH,
-            size: None,
-            is_binary: false,
-        });
-    }
+    let gitignore = if follow_gitignore {
+        create_gitignore(path)
+    } else {
+        None
+    };
 
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
@@ -1145,7 +1165,7 @@ pub fn scan_directory(path: &PathBuf, follow_gitignore: bool) -> Vec<FileItem> {
                 };
 
                 if follow_gitignore {
-                    if is_path_ignored(&full_path, path) {
+                    if is_path_ignored(&full_path, path, &gitignore) {
                         continue;
                     }
 
@@ -1176,7 +1196,19 @@ pub fn scan_directory(path: &PathBuf, follow_gitignore: bool) -> Vec<FileItem> {
     items
 }
 
-/// Scan a directory recursively and return all files and directories (optimized with parallel processing)
+/// Scan a directory recursively and return all files and directories.
+///
+/// # Arguments
+///
+/// * `path` - The directory path to scan
+/// * `max_depth` - Maximum recursion depth (0 for unlimited)
+/// * `follow_gitignore` - If true, exclude files matching patterns in `.gitignore` and hidden files
+///
+/// # Examples
+///
+/// ```
+/// let items = scan_directory_recursive(&PathBuf::from("."), 0, true);
+/// ```
 pub fn scan_directory_recursive(
     path: &PathBuf,
     max_depth: usize,
@@ -1221,6 +1253,12 @@ fn scan_recursive_helper_parallel(
         return items;
     }
 
+    let gitignore = if follow_gitignore {
+        create_gitignore(path)
+    } else {
+        None
+    };
+
     let mut dirs_to_scan = Vec::new();
 
     if let Ok(entries) = fs::read_dir(path) {
@@ -1250,7 +1288,7 @@ fn scan_recursive_helper_parallel(
                     };
 
                     if follow_gitignore {
-                        if is_path_ignored(&full_path, path) {
+                        if is_path_ignored(&full_path, path, &gitignore) {
                             return None;
                         }
 
