@@ -476,7 +476,87 @@ fn classify_file_type(path: &Path, filename: &str) -> FileType {
     FileType::Other
 }
 
-/// Calculate directory-based bonus for a file path
+/// Calculate recency bonus based on file modification time
+fn recency_bonus(modified: &SystemTime) -> i32 {
+    let now = SystemTime::now();
+    let duration = now
+        .duration_since(*modified)
+        .unwrap_or(std::time::Duration::ZERO);
+
+    let seconds = duration.as_secs();
+
+    // High bonus for recently modified files
+    if seconds < 3600 {
+        // Modified within last hour
+        1000 - (seconds as i32 / 36) // 1000 down to 0 over 1 hour
+    } else if seconds < 86400 {
+        // Modified within last day
+        500 - ((seconds - 3600) as i32 / 82800) // 500 down to 0 over 23 hours
+    } else if seconds < 2592000 {
+        // Modified within last week
+        200 - ((seconds - 86400) as i32 / 604800) // 200 down to 0 over 6 days
+    } else if seconds < 7776000 {
+        // Modified within last month
+        50 - ((seconds - 2592000) as i32 / 1814400) // 50 down to 0 over 25 days
+    } else {
+        // Modified more than a month ago
+        0
+    }
+}
+
+/// Calculate bonus for important filenames
+fn important_name_bonus(filename: &str) -> i32 {
+    let filename_lower = filename.to_lowercase();
+
+    // Primary entry points (highest priority)
+    if matches!(
+        &*filename_lower,
+        "main.rs"
+            | "main.js"
+            | "main.ts"
+            | "main.py"
+            | "main.go"
+            | "main.java"
+            | "lib.rs"
+            | "index.js"
+            | "index.ts"
+            | "index.html"
+    ) {
+        return 300;
+    }
+
+    // Build/config files (high priority)
+    if matches!(
+        &*filename_lower,
+        "cargo.toml"
+            | "cargo.lock"
+            | "package.json"
+            | "package-lock.json"
+            | "tsconfig.json"
+            | "webpack.config.js"
+            | "vite.config.js"
+            | "Makefile"
+            | "dockerfile"
+            | "docker-compose.yml"
+            | ".gitignore"
+    ) {
+        return 200;
+    }
+
+    // Test files (medium priority)
+    if filename_lower.starts_with("test_")
+        || filename_lower.ends_with("_test")
+        || filename_lower.contains(".test.")
+        || filename_lower.ends_with("_spec")
+        || filename_lower.contains("spec.")
+    {
+        return 100;
+    }
+
+    0
+}
+
+/// Calculate bonus based on directory structure and location
 fn calculate_directory_bonus(path: &Path, filename: &str) -> i32 {
     let path_str = path.to_string_lossy();
 
@@ -782,11 +862,12 @@ impl FuzzySearchState {
                         };
 
                         {
-                            // Calculate bonuses for non-recursive mode too
                             let file_type = classify_file_type(&item.path, filename);
                             let type_bonus = file_type.bonus_score();
                             let dir_bonus = calculate_directory_bonus(&item.path, filename);
-                            let total_bonus = type_bonus + dir_bonus;
+                            let recency = recency_bonus(&item.modified);
+                            let name_importance = important_name_bonus(filename);
+                            let total_bonus = type_bonus + dir_bonus + recency + name_importance;
 
                             fuzzy_match_optimized(&self.query, filename)
                                 .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
@@ -843,11 +924,12 @@ impl FuzzySearchState {
                     let result = if self.recursive_search {
                         fuzzy_match_with_priority(&self.query, item)
                     } else {
-                        // Calculate bonuses for non-recursive mode
                         let file_type = classify_file_type(&item.path, &item.name);
                         let type_bonus = file_type.bonus_score();
                         let dir_bonus = calculate_directory_bonus(&item.path, &item.name);
-                        let total_bonus = type_bonus + dir_bonus;
+                        let recency = recency_bonus(&item.modified);
+                        let name_importance = important_name_bonus(&item.name);
+                        let total_bonus = type_bonus + dir_bonus + recency + name_importance;
 
                         fuzzy_match(&self.query, &item.name)
                             .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
@@ -863,11 +945,12 @@ impl FuzzySearchState {
                     let result = if self.recursive_search {
                         fuzzy_match_with_priority(&self.query, item)
                     } else {
-                        // Calculate bonuses for non-recursive mode
                         let file_type = classify_file_type(&item.path, &item.name);
                         let type_bonus = file_type.bonus_score();
                         let dir_bonus = calculate_directory_bonus(&item.path, &item.name);
-                        let total_bonus = type_bonus + dir_bonus;
+                        let recency = recency_bonus(&item.modified);
+                        let name_importance = important_name_bonus(&item.name);
+                        let total_bonus = type_bonus + dir_bonus + recency + name_importance;
 
                         fuzzy_match(&self.query, &item.name)
                             .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
@@ -1207,7 +1290,9 @@ fn fuzzy_match_with_priority_optimized(query: &str, item: &FileItem) -> Option<(
     let file_type = classify_file_type(&item.path, filename);
     let type_bonus = file_type.bonus_score();
     let dir_bonus = calculate_directory_bonus(&item.path, filename);
-    let total_bonus = type_bonus + dir_bonus;
+    let recency = recency_bonus(&item.modified);
+    let name_importance = important_name_bonus(filename);
+    let total_bonus = type_bonus + dir_bonus + recency + name_importance;
 
     // Priority 1: Exact filename match (always highest priority)
     if filename == query {
@@ -1254,7 +1339,9 @@ pub fn fuzzy_match_with_priority(query: &str, item: &FileItem) -> Option<(i32, M
     let file_type = classify_file_type(&item.path, filename);
     let type_bonus = file_type.bonus_score();
     let dir_bonus = calculate_directory_bonus(&item.path, filename);
-    let total_bonus = type_bonus + dir_bonus;
+    let recency = recency_bonus(&item.modified);
+    let name_importance = important_name_bonus(filename);
+    let total_bonus = type_bonus + dir_bonus + recency + name_importance;
 
     // Priority 1: Exact filename match (always highest priority)
     if filename == query {
