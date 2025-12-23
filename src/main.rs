@@ -189,6 +189,9 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(Command::FuzzySearchToggleRecursive)
             }
+            KeyCode::Char('g') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(Command::FuzzySearchToggleGitignore)
+            }
             KeyCode::Char(c)
                 if c.is_alphanumeric() || c == ' ' || c == '.' || c == '_' || c == '-' =>
             {

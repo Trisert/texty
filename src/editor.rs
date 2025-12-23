@@ -234,6 +234,17 @@ impl Editor {
                     self.status_message = Some(format!("Recursive search {}", mode_text));
                 }
             }
+            Command::FuzzySearchToggleGitignore => {
+                if let Some(fuzzy) = &mut self.fuzzy_search {
+                    fuzzy.toggle_gitignore();
+                    let mode_text = if fuzzy.follow_gitignore {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    };
+                    self.status_message = Some(format!("Gitignore filtering {}", mode_text));
+                }
+            }
             Command::FuzzySearchLoadMore => {
                 if let Some(fuzzy) = &mut self.fuzzy_search {
                     fuzzy.load_more_results();

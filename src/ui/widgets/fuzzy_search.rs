@@ -102,6 +102,12 @@ impl<'a> FuzzySearchWidget<'a> {
             ""
         };
 
+        let gitignore_indicator = if self.state.follow_gitignore {
+            " [G]"
+        } else {
+            ""
+        };
+
         // Show result count
         let result_display = if self.state.result_count > 0 {
             format!(
@@ -120,8 +126,8 @@ impl<'a> FuzzySearchWidget<'a> {
             ""
         };
         let title = format!(
-            "Search{}{}{}:",
-            mode_indicator, result_display, pagination_hint
+            "Search{}{}{}{}:",
+            mode_indicator, gitignore_indicator, result_display, pagination_hint
         );
         let search_block = Block::default().borders(Borders::NONE).title(title);
 
@@ -298,7 +304,8 @@ impl<'a> FuzzySearchWidget<'a> {
             preview_block.render(area, buf);
 
             if let Some(preview_buffer) = &self.state.current_preview {
-                let preview_paragraph = render_preview_content(preview_buffer, self.theme, inner_area);
+                let preview_paragraph =
+                    render_preview_content(preview_buffer, self.theme, inner_area);
                 preview_paragraph.render(inner_area, buf);
             }
         } else {
