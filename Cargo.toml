@@ -22,7 +22,7 @@ arboard = "3.6"
 
 # Performance
 rayon = "1.8"
-lru = "0.14"
+lru = "0.16.2"
 
 # CLI
 clap = { version = "4.0", features = ["derive"] }
