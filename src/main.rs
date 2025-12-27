@@ -144,6 +144,7 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             KeyCode::Char('s') => Some(Command::WorkspaceSymbols),
             KeyCode::Char('a') => Some(Command::CodeAction),
             KeyCode::Char('w') => Some(Command::SaveFile),
+            KeyCode::Char('t') => Some(Command::ToggleTheme),
             KeyCode::Char('q') => Some(Command::Quit),
             KeyCode::Char(' ') => {
                 // Check for double space
@@ -191,6 +192,9 @@ fn key_to_command(key_event: crossterm::event::KeyEvent, mode: &Mode) -> Option<
             }
             KeyCode::Char('g') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(Command::FuzzySearchToggleGitignore)
+            }
+            KeyCode::Char('t') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(Command::ToggleTheme)
             }
             KeyCode::Char(c)
                 if c.is_alphanumeric() || c == ' ' || c == '.' || c == '_' || c == '-' =>
