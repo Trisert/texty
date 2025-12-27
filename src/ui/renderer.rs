@@ -52,6 +52,8 @@ impl TuiRenderer {
         let terminal = Terminal::new(backend)?;
         let mut theme = if use_terminal_palette {
             Theme::with_terminal_palette()
+        } else if theme_name != "default" {
+            Theme::with_named_theme(theme_name.to_string())
         } else {
             Theme::default()
         };

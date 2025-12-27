@@ -12,6 +12,7 @@ pub struct Theme {
     pub loaded_syntax_theme: Option<crate::syntax::Theme>,
     pub use_terminal_palette: bool,
     pub terminal_palette: Option<TerminalPalette>,
+    pub named_theme: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +126,15 @@ impl Theme {
         Self {
             use_terminal_palette: true,
             terminal_palette: Some(TerminalPalette::detect()),
+            ..Default::default()
+        }
+    }
+
+    pub fn with_named_theme(name: String) -> Self {
+        Self {
+            use_terminal_palette: false,
+            terminal_palette: None,
+            named_theme: Some(name),
             ..Default::default()
         }
     }

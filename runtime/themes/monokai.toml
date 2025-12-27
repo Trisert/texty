@@ -1,47 +1,39 @@
 [palette]
-Red = "#f92672"
-Green = "#a6e22e"
-Blue = "#66d9ef"
-Yellow = "#e6db74"
-Cyan = "#a1efe4"
-Magenta = "#fd971f"
-Purple = "#ae81ff"
-Gray = "#75715e"
+Red = "#ff5555"
+Green = "#50fa7b"
+Blue = "#61afef"
+Yellow = "#f1fa8c"
+Cyan = "#8be9fd"
+Magenta = "#ff79c6"
+Gray = "#495162"
 White = "#f8f8f2"
-Orange = "#fd971f"
 
 [keyword]
-fg = "#f92672"
+fg = "#ff79c6"
 
 [function]
-fg = "#a6e22e"
+fg = "#50fa7b"
 
 [string]
-fg = "#e6db74"
+fg = "#f1fa8c"
 
 [comment]
-fg = "#75715e"
+fg = "#6272a4"
 
 [variable]
 fg = "#f8f8f2"
 
 [type]
-fg = "#66d9ef"
+fg = "#ff79c6"
 
 [operator]
-fg = "#f92672"
+fg = "#ff79c6"
 
 [punctuation.bracket]
-fg = "#f8f8f2"
+fg = "#495162"
 
-[constant.builtin]
-fg = "#ae81ff"
+[constant.numeric.integer]
+fg = "#bd93f9"
 
-[constant.numeric]
-fg = "#ae81ff"
-
-[string.regex]
-fg = "#ce9178"
-
-[type.builtin]
-fg = "#66d9ef"
+[constant.numeric.float]
+fg = "#bd93f9"
