@@ -1,10 +1,10 @@
 [palette]
-Red = "#ff5555"
-Green = "#50fa7b"
+Red = "#f92672"
+Green = "#a6e22e"
 Blue = "#61afef"
-Yellow = "#f1fa8c"
-Cyan = "#8be9fd"
-Magenta = "#ff79c6"
+Yellow = "#e6db74"
+Cyan = "#66d9ef"
+Magenta = "#c678dd"
 Gray = "#495162"
 White = "#f8f8f2"
 
@@ -14,6 +14,9 @@ fg = "#ff79c6"
 [function]
 fg = "#50fa7b"
 
+[type]
+fg = "#ff79c6"
+
 [string]
 fg = "#f1fa8c"
 
@@ -22,9 +25,6 @@ fg = "#6272a4"
 
 [variable]
 fg = "#f8f8f2"
-
-[type]
-fg = "#ff79c6"
 
 [operator]
 fg = "#ff79c6"
