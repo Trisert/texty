@@ -245,6 +245,9 @@ impl Editor {
                     self.status_message = Some(format!("Gitignore filtering {}", mode_text));
                 }
             }
+            Command::ToggleTheme => {
+                self.status_message = Some("Theme toggle - implement runtime theme switching".to_string());
+            }
             Command::FuzzySearchLoadMore => {
                 if let Some(fuzzy) = &mut self.fuzzy_search {
                     fuzzy.load_more_results();

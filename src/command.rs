@@ -31,6 +31,7 @@ pub enum Command {
     FuzzySearchToggleRecursive,
     FuzzySearchToggleGitignore,
     FuzzySearchLoadMore,
+    ToggleTheme,
     Quit,
     // Add more as needed
 }
