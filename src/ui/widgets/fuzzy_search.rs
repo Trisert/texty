@@ -96,18 +96,6 @@ impl<'a> Widget for FuzzySearchWidget<'a> {
 
 impl<'a> FuzzySearchWidget<'a> {
     fn render_search_input(&self, area: Rect, buf: &mut Buffer) {
-        let mode_indicator = if self.state.recursive_search {
-            " [R]"
-        } else {
-            ""
-        };
-
-        let gitignore_indicator = if self.state.follow_gitignore {
-            " [G]"
-        } else {
-            ""
-        };
-
         let binding = if !self.state.query.is_empty() {
             format!(" {} results", self.state.result_count)
         } else {
@@ -133,7 +121,7 @@ impl<'a> FuzzySearchWidget<'a> {
 
         let mut title = mode_title.clone();
         if !result_title.is_empty() {
-            title.push_str(" ");
+            title.push(' ');
             title.push_str(result_title.as_str());
         }
         let search_block = Block::default().borders(Borders::NONE).title(title);

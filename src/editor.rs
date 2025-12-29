@@ -119,7 +119,7 @@ impl Editor {
                 }
             }
             Command::MoveDown => {
-                if self.cursor.line < self.buffer.line_count() - 1 {
+                if self.cursor.line < self.buffer.line_count().saturating_sub(1) {
                     self.cursor.line += 1;
                 }
             }
@@ -244,9 +244,6 @@ impl Editor {
                     };
                     self.status_message = Some(format!("Gitignore filtering {}", mode_text));
                 }
-            }
-            Command::ToggleTheme => {
-                self.status_message = Some("Theme toggle - implement runtime theme switching".to_string());
             }
             Command::FuzzySearchLoadMore => {
                 if let Some(fuzzy) = &mut self.fuzzy_search {
@@ -659,5 +656,173 @@ impl Editor {
 
         self.fuzzy_search = Some(fuzzy_state);
         self.mode = Mode::FuzzySearch;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_move_down_in_empty_buffer() {
+        let mut editor = Editor::new();
+        // Clear buffer to make it truly empty
+        editor.buffer.rope = ropey::Rope::from("");
+
+        // Try to move down - should not crash
+        editor.execute_command(Command::MoveDown);
+        assert_eq!(editor.cursor.line, 0);
+        assert_eq!(editor.cursor.col, 0);
+    }
+
+    #[test]
+    fn test_move_up_from_top() {
+        let mut editor = Editor::new();
+        editor.execute_command(Command::MoveUp);
+        assert_eq!(editor.cursor.line, 0);
+    }
+
+    #[test]
+    fn test_move_left_from_start() {
+        let mut editor = Editor::new();
+        editor.execute_command(Command::MoveLeft);
+        assert_eq!(editor.cursor.col, 0);
+    }
+
+    #[test]
+    fn test_move_right_at_end_of_line() {
+        let mut editor = Editor::new();
+        editor.buffer.insert_char('a', 0, 0).unwrap();
+        editor.buffer.insert_char('b', 0, 1).unwrap();
+        editor.cursor.col = 2; // Move to end
+
+        editor.execute_command(Command::MoveRight);
+        assert_eq!(editor.cursor.col, 2);
+    }
+
+    #[test]
+    fn test_move_down_to_last_line() {
+        let mut editor = Editor::new();
+        editor.buffer.insert_char('a', 0, 0).unwrap();
+        editor.buffer.insert_char('\n', 0, 1).unwrap();
+        editor.buffer.insert_char('b', 1, 0).unwrap();
+
+        editor.cursor.line = 0;
+        editor.execute_command(Command::MoveDown);
+        assert_eq!(editor.cursor.line, 1);
+    }
+
+    #[test]
+    fn test_delete_char_from_start() {
+        let mut editor = Editor::new();
+        editor.execute_command(Command::DeleteChar);
+        // Should not crash when deleting at col 0
+        assert_eq!(editor.cursor.col, 0);
+    }
+
+    #[test]
+    fn test_insert_mode_movement() {
+        let mut editor = Editor::new();
+        editor.mode = Mode::Insert;
+        editor.buffer.insert_char('a', 0, 0).unwrap();
+        editor.buffer.insert_char('b', 0, 1).unwrap();
+
+        editor.cursor.col = 0;
+        editor.execute_command(Command::MoveRight);
+        assert_eq!(editor.cursor.col, 1);
+
+        editor.execute_command(Command::MoveLeft);
+        assert_eq!(editor.cursor.col, 0);
+    }
+
+    #[test]
+    fn test_viewport_scrolling_on_move() {
+        let mut editor = Editor::new();
+        // Add many lines
+        for i in 0..30 {
+            if i > 0 {
+                editor.buffer.insert_char('\n', 0, 0).unwrap();
+            }
+            editor.buffer.insert_char('a', 0, 0).unwrap();
+        }
+
+        // Set viewport smaller than content
+        editor.viewport.rows = 10;
+        editor.viewport.cols = 80;
+
+        // Move cursor to line 25
+        editor.cursor.line = 25;
+        editor
+            .viewport
+            .scroll_to_cursor(editor.cursor.line, editor.cursor.col);
+
+        // Offset should be adjusted to keep cursor visible
+        assert!(editor.cursor.line >= editor.viewport.offset_line);
+        assert!(editor.cursor.line < editor.viewport.offset_line + editor.viewport.rows);
+    }
+
+    #[test]
+    fn test_cursor_col_adjustment_after_text_change() {
+        let mut editor = Editor::new();
+        editor.buffer.insert_char('a', 0, 0).unwrap();
+        editor.buffer.insert_char('b', 0, 1).unwrap();
+        editor.buffer.insert_char('c', 0, 2).unwrap();
+
+        editor.cursor.col = 3; // Beyond line length
+
+        // Text change should clamp cursor
+        editor.notify_text_change();
+        let line_len = editor.buffer.line_len(0);
+        assert!(editor.cursor.col <= line_len);
+    }
+
+    #[test]
+    fn test_multiple_rapid_movements() {
+        let mut editor = Editor::new();
+        editor.buffer.insert_char('a', 0, 0).unwrap();
+        editor.buffer.insert_char('b', 0, 1).unwrap();
+        editor.buffer.insert_char('c', 0, 2).unwrap();
+        editor.buffer.insert_char('d', 0, 3).unwrap();
+
+        // Rapid movements should not overflow
+        for _ in 0..100 {
+            editor.execute_command(Command::MoveRight);
+        }
+        assert_eq!(editor.cursor.col, 4); // Should be clamped to line length
+
+        for _ in 0..100 {
+            editor.execute_command(Command::MoveLeft);
+        }
+        assert_eq!(editor.cursor.col, 0); // Should be clamped to 0
+    }
+
+    #[test]
+    fn test_multiline_navigation() {
+        let mut editor = Editor::new();
+        // Create 20 lines
+        for i in 0..20 {
+            if i > 0 {
+                editor.buffer.insert_char('\n', 0, 0).unwrap();
+            }
+            editor.buffer.insert_char('a', 0, 0).unwrap();
+        }
+
+        editor.cursor.line = 0;
+
+        // Move down through all lines
+        for i in 0..19 {
+            editor.execute_command(Command::MoveDown);
+            assert_eq!(editor.cursor.line, i + 1);
+        }
+
+        // Try to move down past end
+        editor.execute_command(Command::MoveDown);
+        assert_eq!(editor.cursor.line, 19);
+
+        // Move back up
+        for i in (1..=19).rev() {
+            editor.execute_command(Command::MoveUp);
+            assert_eq!(editor.cursor.line, i - 1);
+        }
     }
 }

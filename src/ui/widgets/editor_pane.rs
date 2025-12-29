@@ -67,7 +67,10 @@ impl Widget for EditorPane<'_> {
         for i in 0..area.height as usize {
             let line_idx = self.editor.viewport.offset_line + i;
             if let Some(line) = self.editor.buffer.line(line_idx) {
-                let visible_line = line[self.editor.viewport.offset_col..].to_string();
+                let visible_line = line
+                    .chars()
+                    .skip(self.editor.viewport.offset_col)
+                    .collect::<String>();
 
                 // Get diagnostics for this line
                 let line_diagnostics = self.get_line_diagnostics(line_idx);
@@ -93,8 +96,18 @@ impl Widget for EditorPane<'_> {
                     for token in highlights {
                         let rel_byte_start = token.start - line_start_byte;
                         let rel_byte_end = token.end - line_start_byte;
-                        let char_start = line_text[0..rel_byte_start].chars().count();
-                        let char_end = line_text[0..rel_byte_end].chars().count();
+
+                        // Calculate character positions with bounds checking
+                        let char_start = line_text
+                            .char_indices()
+                            .find(|(byte_idx, _)| *byte_idx == rel_byte_start)
+                            .map(|(idx, _)| idx)
+                            .unwrap_or(line_text.len());
+                        let char_end = line_text
+                            .char_indices()
+                            .find(|(byte_idx, _)| *byte_idx == rel_byte_end)
+                            .map(|(idx, _)| idx)
+                            .unwrap_or(line_text.len());
 
                         if char_start < self.editor.viewport.offset_col + visible_line.len()
                             && char_end > self.editor.viewport.offset_col
@@ -146,27 +159,42 @@ impl Widget for EditorPane<'_> {
                     // Build spans from merged ranges
                     for (start, end, color) in merged_ranges {
                         if start > pos {
-                            spans.push(Span::raw(visible_line[pos..start].to_string()));
+                            let start_idx = start.min(visible_line.len());
+                            spans.push(Span::styled(
+                                visible_line[pos..start_idx].to_string(),
+                                Style::default().fg(self.theme.general.foreground),
+                            ));
                         }
+                        let end_idx = end.min(visible_line.len());
+                        let clamped_start = start.min(end_idx);
                         spans.push(Span::styled(
-                            visible_line[start..end].to_string(),
+                            visible_line[clamped_start..end_idx].to_string(),
                             Style::default().fg(color),
                         ));
                         pos = end;
                     }
 
                     if pos < visible_line.len() {
-                        spans.push(Span::raw(visible_line[pos..].to_string()));
+                        spans.push(Span::styled(
+                            visible_line[pos..].to_string(),
+                            Style::default().fg(self.theme.general.foreground),
+                        ));
                     }
 
                     let line_widget = Line::from(spans);
                     buf.set_line(area.x, area.y + i as u16, &line_widget, area.width);
                 } else {
-                    let line_widget = Line::from(visible_line);
+                    let line_widget = Line::from(vec![Span::styled(
+                        visible_line,
+                        Style::default().fg(self.theme.general.foreground),
+                    )]);
                     buf.set_line(area.x, area.y + i as u16, &line_widget, area.width);
                 }
             } else {
-                let line_widget = Line::from("~");
+                let line_widget = Line::from(vec![Span::styled(
+                    "~",
+                    Style::default().fg(self.theme.general.foreground),
+                )]);
                 buf.set_line(area.x, area.y + i as u16, &line_widget, area.width);
             }
         }

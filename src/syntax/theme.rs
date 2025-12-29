@@ -108,6 +108,22 @@ mod tests {
 
     #[test]
     fn test_theme_from_toml() {
-        // TODO: add test once TOML parsing is fixed
+        let theme = Theme::from_file("runtime/themes/monokai.toml").unwrap();
+        
+        let comment_style = theme.get_style("comment");
+        assert!(comment_style.fg.is_some());
+        if let Some(color) = comment_style.fg {
+            assert_eq!(color.r, 98);
+            assert_eq!(color.g, 114);
+            assert_eq!(color.b, 164);
+        }
+        
+        let keyword_style = theme.get_style("keyword");
+        assert!(keyword_style.fg.is_some());
+        if let Some(color) = keyword_style.fg {
+            assert_eq!(color.r, 255);
+            assert_eq!(color.g, 121);
+            assert_eq!(color.b, 198);
+        }
     }
 }

@@ -339,9 +339,6 @@ fn fuzzy_match_v1(text: &str, pattern: &str, case_sensitive: bool) -> Option<Fzf
 
 // ===== FUZZY SEARCH CONSTANTS =====
 
-/// Default number of results to display initially for performance
-const DEFAULT_DISPLAY_LIMIT: usize = usize::MAX;
-
 // ===== FILE TYPE AND DIRECTORY SCORING =====
 
 /// File type classification for intelligent scoring
@@ -742,9 +739,8 @@ impl FuzzySearchState {
         // Try instant backtrack from cache first
         if let Some(cached_results) = self.result_cache.get(&self.query) {
             self.result_count = cached_results.len();
-            self.displayed_count = self.result_count.min(DEFAULT_DISPLAY_LIMIT);
-            self.has_more_results = self.result_count > DEFAULT_DISPLAY_LIMIT;
-            self.filtered_items = cached_results[..self.displayed_count].to_vec();
+            self.displayed_count = cached_results.len();
+            self.filtered_items = cached_results.clone();
             self.selected_index = 0;
             self.scroll_offset = 0;
         } else {
@@ -824,12 +820,10 @@ impl FuzzySearchState {
 
         // Update state with early termination results
         self.result_count = scored_items.len();
-        self.displayed_count = scored_items.len().min(DEFAULT_DISPLAY_LIMIT);
-        self.has_more_results = scored_items.len() > DEFAULT_DISPLAY_LIMIT;
+        self.displayed_count = scored_items.len();
 
         self.filtered_items = scored_items
             .iter()
-            .take(self.displayed_count)
             .map(|(item, _, _)| item.clone())
             .collect();
 
@@ -846,11 +840,7 @@ impl FuzzySearchState {
     }
 
     /// Load more results for pagination (no-op since all results shown)
-    pub fn load_more_results(&mut self) {
-        if !self.has_more_results {
-            return;
-        }
-    }
+    pub fn load_more_results(&mut self) {}
 
     pub fn update_filter(&mut self) {
         self.query = self.query.trim().to_string();
@@ -1789,9 +1779,6 @@ mod tests {
 
     #[test]
     fn test_display_no_limit() {
-        // Verify that all results are displayed (no limit)
-        assert_eq!(DEFAULT_DISPLAY_LIMIT, usize::MAX);
-
         // Test that all results are shown
         let items: Vec<FileItem> = (0..150)
             .map(|i| FileItem {

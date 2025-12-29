@@ -52,15 +52,18 @@ impl TuiRenderer {
         let terminal = Terminal::new(backend)?;
         let mut theme = if use_terminal_palette {
             Theme::with_terminal_palette()
-        } else if theme_name != "default" {
-            Theme::with_named_theme(theme_name.to_string())
         } else {
-            Theme::default()
+            Theme::with_named_theme(theme_name.to_string())
         };
 
         let theme_path = format!("runtime/themes/{}.toml", theme_name);
         if let Ok(loaded_theme) = crate::syntax::Theme::from_file(&theme_path) {
             theme.loaded_syntax_theme = Some(loaded_theme);
+        } else {
+            eprintln!("Warning: Failed to load theme '{}', using monokai theme", theme_name);
+            if let Ok(fallback_theme) = crate::syntax::Theme::from_file("runtime/themes/monokai.toml") {
+                theme.loaded_syntax_theme = Some(fallback_theme);
+            }
         }
 
         Ok(Self { terminal, theme })
