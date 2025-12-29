@@ -1,2 +1,5 @@
-/target
-image/
+# Test patterns
+*.log
+target/
+node_modules/
+test_cache/

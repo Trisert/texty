@@ -20,6 +20,9 @@ tree-sitter-typescript = "0.20"
 # Clipboard
 arboard = "3.6"
 
+# Config
+dirs = "6.0.0"
+
 # Performance
 rayon = "1.8"
 lru = "0.16"

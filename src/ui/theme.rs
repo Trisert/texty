@@ -202,3 +202,48 @@ impl Theme {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_syntax_color_with_loaded_theme() {
+        use crate::syntax::Theme as SyntaxTheme;
+        use ratatui::style::Color;
+        
+        // Load monokai syntax theme
+        let syntax_theme = SyntaxTheme::from_file("runtime/themes/monokai.toml").unwrap();
+        
+        // Create UI theme with loaded syntax theme
+        let mut ui_theme = Theme {
+            use_terminal_palette: false,
+            terminal_palette: None,
+            named_theme: Some("monokai".to_string()),
+            loaded_syntax_theme: Some(syntax_theme),
+            ..Default::default()
+        };
+        
+        // Test that comment color is from loaded theme
+        let comment_color = ui_theme.syntax_color("comment");
+        match comment_color {
+            Color::Rgb(r, g, b) => {
+                assert_eq!(r, 98);
+                assert_eq!(g, 114);
+                assert_eq!(b, 164);
+            }
+            _ => panic!("Expected RGB color, got {:?}", comment_color),
+        }
+        
+        // Test that keyword color is from loaded theme
+        let keyword_color = ui_theme.syntax_color("keyword");
+        match keyword_color {
+            Color::Rgb(r, g, b) => {
+                assert_eq!(r, 255);
+                assert_eq!(g, 121);
+                assert_eq!(b, 198);
+            }
+            _ => panic!("Expected RGB color, got {:?}", keyword_color),
+        }
+    }
+}

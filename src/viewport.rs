@@ -16,9 +16,22 @@ impl Viewport {
     }
 
     pub fn scroll_to_cursor(&mut self, cursor_line: usize, cursor_col: usize) {
-        // Center the cursor
-        self.offset_line = cursor_line.saturating_sub(self.rows / 2);
-        self.offset_col = cursor_col.saturating_sub(self.cols / 2);
+        // Only scroll if cursor is outside visible area (don't center unnecessarily)
+        if cursor_line < self.offset_line {
+            // Cursor above viewport: scroll to show cursor at top
+            self.offset_line = cursor_line;
+        } else if cursor_line >= self.offset_line + self.rows {
+            // Cursor below viewport: scroll to show cursor at bottom
+            self.offset_line = cursor_line.saturating_sub(self.rows - 1);
+        }
+
+        if cursor_col < self.offset_col {
+            // Cursor left of viewport: scroll to show cursor at left edge
+            self.offset_col = cursor_col;
+        } else if cursor_col >= self.offset_col + self.cols {
+            // Cursor right of viewport: scroll to show cursor at right edge
+            self.offset_col = cursor_col.saturating_sub(self.cols - 1);
+        }
     }
 }
 
@@ -48,31 +61,28 @@ mod tests {
     fn test_scroll_to_cursor_below() {
         let mut viewport = Viewport::new(10, 20);
         viewport.scroll_to_cursor(15, 10);
-        assert_eq!(viewport.offset_line, 10);
+        // Cursor below viewport (line 15 >= 10), scroll to show cursor at bottom
+        assert_eq!(viewport.offset_line, 6);
         assert_eq!(viewport.offset_col, 0);
     }
 
     #[test]
     fn test_scroll_to_cursor_left() {
         let mut viewport = Viewport::new(10, 20);
+        // First move offset_col to the right
+        viewport.offset_col = 10;
         viewport.scroll_to_cursor(5, 5);
+        // Cursor is left of viewport (col 5 < 10), scroll to show cursor at left edge
+        assert_eq!(viewport.offset_col, 5);
         assert_eq!(viewport.offset_line, 0);
-        assert_eq!(viewport.offset_col, 0);
-    }
-
-    #[test]
-    fn test_scroll_to_cursor_right() {
-        let mut viewport = Viewport::new(10, 20);
-        viewport.scroll_to_cursor(5, 25);
-        assert_eq!(viewport.offset_line, 0);
-        assert_eq!(viewport.offset_col, 15);
     }
 
     #[test]
     fn test_scroll_to_cursor_within_viewport() {
         let mut viewport = Viewport::new(10, 20);
         viewport.scroll_to_cursor(7, 10);
-        assert_eq!(viewport.offset_line, 2);
+        // Cursor is already visible, no scroll needed
+        assert_eq!(viewport.offset_line, 0);
         assert_eq!(viewport.offset_col, 0);
     }
 

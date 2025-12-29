@@ -2,7 +2,7 @@
 
 use lru::LruCache;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::collections::HashSet;
@@ -92,20 +92,19 @@ impl PreviewBuffer {
             if let Ok(mut highlighter) = SyntaxHighlighter::new(config)
                 && highlighter.parse(&self.content).is_ok()
             {
-                    if self.syntax_highlights.is_none() {
-                        self.syntax_highlights = Some(Vec::new());
-                    }
+                if self.syntax_highlights.is_none() {
+                    self.syntax_highlights = Some(Vec::new());
+                }
 
-                    if let Some(highlights) = &mut self.syntax_highlights {
-                        for line_idx in start_line..end_line {
-                            if !self.highlight_progress.is_line_highlighted(line_idx)
-                                && let Some(line_highlights) =
-                                    highlighter.get_line_highlights(line_idx)
-                            {
-                                highlights.extend(line_highlights.iter().cloned());
-                            }
+                if let Some(highlights) = &mut self.syntax_highlights {
+                    for line_idx in start_line..end_line {
+                        if !self.highlight_progress.is_line_highlighted(line_idx)
+                            && let Some(line_highlights) = highlighter.get_line_highlights(line_idx)
+                        {
+                            highlights.extend(line_highlights.iter().cloned());
                         }
                     }
+                }
             }
         } else {
             if self.syntax_highlights.is_none() {
@@ -211,7 +210,10 @@ pub fn render_preview_content(
                     // Add unhighlighted text before highlight
                     if relative_start > pos {
                         let before_text = line_content[pos..relative_start].to_string();
-                        spans.push(Span::styled(before_text, Style::default().fg(Color::White)));
+                        spans.push(Span::styled(
+                            before_text,
+                            Style::default().fg(theme.general.foreground),
+                        ));
                     }
 
                     // Add highlighted text
@@ -227,7 +229,10 @@ pub fn render_preview_content(
                 // Add remaining unhighlighted text
                 if pos < line_content.len() {
                     let remaining = line_content[pos..].to_string();
-                    spans.push(Span::styled(remaining, Style::default().fg(Color::White)));
+                    spans.push(Span::styled(
+                        remaining,
+                        Style::default().fg(theme.general.foreground),
+                    ));
                 }
 
                 Line::from(spans)
@@ -235,7 +240,7 @@ pub fn render_preview_content(
                 // No highlights for this line
                 Line::from(Span::styled(
                     line_content.to_owned(),
-                    Style::default().fg(Color::White),
+                    Style::default().fg(theme.general.foreground),
                 ))
             }
         })

@@ -13,9 +13,13 @@ pub struct CliArgs {
     #[arg(long, short = 't')]
     pub terminal_palette: bool,
 
-    /// Syntax theme to use (default or monokai)
-    #[arg(long, short = 'T', default_value_t = String::from("default"))]
+    /// Syntax theme to use (monokai, dracula, nord, gruvbox, solarized-dark, or path to custom theme.toml)
+    #[arg(long, short = 'T', default_value_t = String::from("monokai"))]
     pub theme: String,
+
+    /// List all available built-in themes and exit
+    #[arg(long = "list-themes", short = 'L', action = clap::ArgAction::SetTrue)]
+    pub list_themes: bool,
 }
 
 impl CliArgs {
@@ -60,7 +64,7 @@ mod tests {
     fn test_parse_no_args() {
         let args = CliArgs::parse_from(&["texty"]);
         assert!(args.file.is_none());
-        assert_eq!(args.theme, "default");
+        assert_eq!(args.theme, "monokai");
     }
 
     /// Confirms that the `--theme` CLI option sets the `theme` field to the provided value.
@@ -91,19 +95,22 @@ mod tests {
         let file_args = CliArgs {
             file: Some(file_path.clone()),
             terminal_palette: false,
-            theme: "default".to_string(),
+            theme: "monokai".to_string(),
+            list_themes: false,
         };
 
         let dir_args = CliArgs {
             file: Some(dir_path.to_path_buf()),
             terminal_palette: false,
-            theme: "default".to_string(),
+            theme: "monokai".to_string(),
+            list_themes: false,
         };
 
         let nonexistent_args = CliArgs {
             file: Some(PathBuf::from("/nonexistent/path")),
             terminal_palette: false,
-            theme: "default".to_string(),
+            theme: "monokai".to_string(),
+            list_themes: false,
         };
 
         assert!(file_args.exists());

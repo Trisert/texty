@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn test_clipboard_creation() {
-        let clipboard = Clipboard::default();
+        let _clipboard = Clipboard::default();
         assert!(true); // Basic creation test
     }
 

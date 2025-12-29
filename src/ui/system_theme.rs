@@ -370,8 +370,8 @@ fn query_terminal_color(color_index: usize) -> Option<(u8, u8, u8)> {
 ///
 /// # Examples
 ///
-/// ```
-/// // Query the background color (10)
+/// ```ignore // Can't test stdin in doctest
+/// // Querys background color (10)
 /// if let Some((r, g, b)) = query_terminal_special_color(10) {
 ///     // use r, g, b
 ///     println!("background color: {} {} {}", r, g, b);

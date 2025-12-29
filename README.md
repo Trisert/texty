@@ -12,6 +12,68 @@ A terminal text editor written in Rust with Vim keybindings and LSP support.
 - Context-aware auto-indentation
 - Command-line interface (`:q`, `:w`, `:x`, `:e`, etc.)
 
+## Themes
+
+Texty ships with 5 built-in themes and allows custom themes.
+
+### Built-in Themes
+
+- **monokai** (default) - Classic dark theme
+- **dracula** - Popular dark purple theme
+- **nord** - Arctic, bluish dark theme
+- **gruvbox** - Retro groovy color scheme
+- **solarized-dark** - Precision colors for solarized
+
+### Theme Priority (highest to lowest)
+
+1. **CLI flag**: `texty --theme dracula`
+2. **Config file**: `theme = "nord"` in `~/.config/texty/config.toml`
+3. **User theme file**:
+   - `~/.config/texty/theme.toml` (XDG config directory)
+   - `~/.texty/theme.toml` (home directory)
+   - `./theme.toml` (current working directory)
+4. **Built-in themes**: Falls back to monokai if not found
+
+### Listing Themes
+
+```bash
+texty --list-themes
+```
+
+### Using a Theme
+
+```bash
+texty --theme monokai
+texty --theme dracula
+texty --theme /path/to/custom.toml
+```
+
+### Configuration File
+
+Create `~/.config/texty/config.toml`:
+
+```toml
+theme = "gruvbox"
+```
+
+### Creating Custom Themes
+
+Create a `theme.toml` file in any of the supported locations. Use `runtime/themes/monokai.toml` as a reference.
+
+### Error Messages
+
+Theme errors appear in both:
+- **Terminal stderr** - For debugging and logging
+- **Status bar** - User-friendly error messages during editor use
+
+### Using Terminal Colors
+
+To use your terminal's color palette instead of a theme:
+
+```bash
+texty --terminal-palette
+```
+
 ## Installation
 
 Requires Rust 1.70+. Optional language servers for IDE features:
