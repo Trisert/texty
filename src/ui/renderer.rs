@@ -42,6 +42,7 @@ impl TuiRenderer {
     /// # Examples
     ///
     /// ```no_run
+    /// # use texty::ui::renderer::TuiRenderer;
     /// let renderer = TuiRenderer::new(false, "default").unwrap();
     /// ```
     pub fn new(
@@ -50,21 +51,29 @@ impl TuiRenderer {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let backend = CrosstermBackend::new(std::io::stdout());
         let terminal = Terminal::new(backend)?;
-        let mut theme = if use_terminal_palette {
+        let theme = if use_terminal_palette {
             Theme::with_terminal_palette()
         } else {
-            Theme::with_named_theme(theme_name.to_string())
-        };
-
-        let theme_path = format!("runtime/themes/{}.toml", theme_name);
-        if let Ok(loaded_theme) = crate::syntax::Theme::from_file(&theme_path) {
-            theme.loaded_syntax_theme = Some(loaded_theme);
-        } else {
-            eprintln!("Warning: Failed to load theme '{}', using monokai theme", theme_name);
-            if let Ok(fallback_theme) = crate::syntax::Theme::from_file("runtime/themes/monokai.toml") {
-                theme.loaded_syntax_theme = Some(fallback_theme);
+            match Theme::load_from_file(theme_name) {
+                Ok(loaded_theme) => loaded_theme,
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to load theme '{}': {}. Trying monokai fallback.",
+                        theme_name, e
+                    );
+                    match Theme::load_from_file("monokai") {
+                        Ok(fallback_theme) => fallback_theme,
+                        Err(fallback_err) => {
+                            eprintln!(
+                                "Warning: Failed to load monokai fallback: {}. Using hardcoded defaults.",
+                                fallback_err
+                            );
+                            Theme::with_named_theme(theme_name.to_string())
+                        }
+                    }
+                }
             }
-        }
+        };
 
         Ok(Self { terminal, theme })
     }
@@ -84,8 +93,8 @@ impl TuiRenderer {
     ///
     /// ```no_run
     /// # use std::error::Error;
-    /// # use mycrate::ui::TuiRenderer;
-    /// # use mycrate::editor::Editor;
+    /// # use texty::ui::renderer::TuiRenderer;
+    /// # use texty::editor::Editor;
     /// # fn demo() -> Result<(), Box<dyn Error>> {
     /// let mut renderer = TuiRenderer::new(false, "default")?;
     /// let mut editor = Editor::default();

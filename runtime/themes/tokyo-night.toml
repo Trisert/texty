@@ -1,0 +1,445 @@
+# Tokyo Night Theme - Based on Helix theme format
+
+[palette]
+bg = "#1a1b26"
+fg = "#a9b1d6"
+red = "#f7768e"
+orange = "#ff9e64"
+yellow = "#e0af68"
+green = "#9ece6a"
+cyan = "#7dcfff"
+blue = "#7aa2f7"
+magenta = "#bb9af7"
+purple = "#9d7cd8"
+white = "#c0caf5"
+black = "#414868"
+gray = "#565f89"
+light_gray = "#a9b1d6"
+
+[editor]
+
+[editor.background]
+fg = "fg"
+bg = "bg"
+
+[editor.whitespace]
+fg = "gray"
+
+[editor.cursor]
+fg = "bg"
+bg = "blue"
+modifiers = ["dim"]
+
+[editor.line-number]
+fg = "gray"
+bg = "bg"
+
+[editor.line-number-selected]
+fg = "blue"
+modifiers = ["bold"]
+
+[editor.selection]
+fg = "fg"
+bg = "#2f3549"
+
+[editor.primary-selection]
+fg = "bg"
+bg = "blue"
+
+[editor.indent-guide]
+fg = "gray"
+
+[editor.current-line]
+bg = "#24283b"
+
+[status]
+
+[status.normal]
+fg = "bg"
+bg = "blue"
+modifiers = ["bold"]
+
+[status.insert]
+fg = "bg"
+bg = "green"
+modifiers = ["bold"]
+
+[status.select]
+fg = "bg"
+bg = "magenta"
+modifiers = ["bold"]
+
+[popup]
+
+[popup.background]
+fg = "fg"
+bg = "#16161e"
+
+[popup.border]
+fg = "gray"
+modifiers = ["bold"]
+
+[popup.menu]
+fg = "fg"
+bg = "bg"
+
+[popup.menu.selected]
+fg = "bg"
+bg = "blue"
+modifiers = ["bold"]
+
+[popup.scrollbar]
+fg = "gray"
+bg = "#2f3549"
+
+[popup.scrollbar-thumb]
+fg = "gray"
+
+[ui]
+
+[ui.menu]
+fg = "fg"
+bg = "bg"
+
+[ui.menu.selected]
+fg = "bg"
+bg = "blue"
+
+[ui.help]
+fg = "gray"
+modifiers = ["dim"]
+
+[ui.cursorline]
+bg = "#24283b"
+
+[ui.cursorline-primary]
+bg = "#2f3549"
+
+[ui.highlight]
+fg = "bg"
+bg = "blue"
+
+[ui.window]
+fg = "fg"
+bg = "#16161e"
+
+[ui.window.border]
+fg = "gray"
+
+[ui.text.focus]
+fg = "fg"
+
+[ui.text.inactive]
+fg = "gray"
+
+# Syntax Styles
+
+[attribute]
+fg = "yellow"
+
+"attribute.builtin"
+fg = "orange"
+
+[comment]
+fg = "gray"
+modifiers = ["italic"]
+
+"comment.line"
+fg = "gray"
+modifiers = ["italic"]
+
+"comment.block"
+fg = "gray"
+modifiers = ["italic"]
+
+"comment.documentation"
+fg = "light_gray"
+
+[constant]
+fg = "orange"
+
+"constant.builtin"
+fg = "orange"
+modifiers = ["bold"]
+
+"constant.numeric"
+fg = "orange"
+
+"constant.character"
+fg = "green"
+
+"constant.character.escape"
+fg = "pink"
+
+[constructor]
+fg = "magenta"
+
+[function]
+fg = "blue"
+
+"function.builtin"
+fg = "cyan"
+
+"function.method"
+fg = "blue"
+
+"function.macro"
+fg = "magenta"
+
+"function.special"
+fg = "pink"
+
+[keyword]
+fg = "magenta"
+modifiers = ["bold"]
+
+"keyword.control"
+fg = "magenta"
+
+"keyword.control.conditional"
+fg = "magenta"
+
+"keyword.control.repeat"
+fg = "magenta"
+
+"keyword.control.import"
+fg = "magenta"
+
+"keyword.control.return"
+fg = "magenta"
+
+"keyword.operator"
+fg = "magenta"
+
+"keyword.directive"
+fg = "purple"
+modifiers = ["bold"]
+
+"keyword.function"
+fg = "magenta"
+
+"keyword.storage"
+fg = "magenta"
+
+"keyword.storage.type"
+fg = "magenta"
+
+"keyword.storage.modifier"
+fg = "purple"
+
+[label]
+fg = "orange"
+
+[operator]
+fg = "pink"
+
+"operator.logical"
+fg = "magenta"
+
+"operator.arithmetic"
+fg = "pink"
+
+[variable]
+fg = "fg"
+
+"variable.builtin"
+fg = "cyan"
+
+"variable.parameter"
+fg = "orange"
+
+"variable.other.member"
+fg = "cyan"
+
+"variable.other.object"
+fg = "fg"
+
+[tag]
+fg = "magenta"
+
+[tag.builtin"
+fg = "magenta"
+modifiers = ["bold"]
+
+[tag.attribute"
+fg = "yellow"
+
+[type]
+fg = "cyan"
+
+"type.builtin"
+fg = "cyan"
+
+"type.enum"
+fg = "cyan"
+
+"type.enum.variant"
+fg = "purple"
+
+"type.parameter"
+fg = "orange"
+
+[type.intrinsic"
+fg = "cyan"
+modifiers = ["bold"]
+
+[punctuation]
+fg = "gray"
+
+"punctuation.delimiter"
+fg = "gray"
+
+"punctuation.bracket"
+fg = "gray"
+
+"punctuation.special"
+fg = "pink"
+
+[special"
+fg = "pink"
+
+[string]
+fg = "green"
+
+"string.regexp"
+fg = "orange"
+
+"string.special"
+fg = "pink"
+
+"string.special.path"
+fg = "green"
+
+"string.special.url"
+fg = "green"
+
+"string.special.symbol"
+fg = "pink"
+
+# Markup
+
+[markup.heading]
+fg = "magenta"
+modifiers = ["bold"]
+
+[markup.heading.1"
+fg = "magenta"
+modifiers = ["bold"]
+
+[markup.heading.2"
+fg = "cyan"
+modifiers = ["bold"]
+
+[markup.heading.3"
+fg = "green"
+modifiers = ["bold"]
+
+[markup.heading.4"
+fg = "orange"
+modifiers = ["bold"]
+
+[markup.bold"
+fg = "fg"
+modifiers = ["bold"]
+
+[markup.italic"
+fg = "fg"
+modifiers = ["italic"]
+
+[markup.strikethrough"
+fg = "gray"
+modifiers = ["crossed_out"]
+
+[markup.link.url"
+fg = "cyan"
+modifiers = ["underlined"]
+
+[markup.link.text"
+fg = "fg"
+
+[markup.quote"
+fg = "gray"
+
+[markup.raw"
+fg = "orange"
+
+[markup.raw.inline"
+fg = "orange"
+
+[markup.raw.block"
+fg = "orange"
+
+[markup.list]
+fg = "magenta"
+
+"markup.list.checked"
+fg = "green"
+
+"markup.list.unchecked"
+fg = "gray"
+
+# Diagnostics
+
+[diagnostic]
+fg = "fg"
+
+"diagnostic.error"
+fg = "red"
+underline = { color = "red", style = "line" }
+modifiers = ["bold"]
+
+"diagnostic.warning"
+fg = "orange"
+underline = { color = "orange", style = "line" }
+
+"diagnostic.info"
+fg = "cyan"
+underline = { color = "cyan", style = "line" }
+
+"diagnostic.hint"
+fg = "green"
+underline = { color = "green", style = "line" }
+
+"diagnostic.unnecessary"
+fg = "gray"
+modifiers = ["dim"]
+
+"diagnostic.deprecated"
+fg = "gray"
+modifiers = ["crossed_out"]
+
+# Diff
+
+[diff.plus"
+fg = "green"
+bg = "#293a3d"
+
+"diff.plus.gutter"
+fg = "green"
+
+"diff.minus"
+fg = "red"
+bg = "#3a2727"
+
+"diff.minus.gutter"
+fg = "red"
+
+"diff.delta"
+fg = "orange"
+bg = "#39362b"
+
+"diff.delta.moved"
+fg = "blue"
+
+"diff.delta.conflict"
+fg = "red"
+modifiers = ["bold"]
+
+"diff.delta.moved-removed"
+fg = "red"
+
+"diff.delta.moved-inserted"
+fg = "green"
+
+[diff.delta.gutter"
+fg = "orange"

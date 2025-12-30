@@ -1,39 +1,178 @@
+# Monokai Theme - Default for Texty
+
 [palette]
-Red = "#f92672"
-Green = "#a6e22e"
-Blue = "#61afef"
-Yellow = "#e6db74"
-Cyan = "#66d9ef"
-Magenta = "#c678dd"
-Gray = "#495162"
-White = "#f8f8f2"
+red = "#f92672"
+green = "#a6e22e"
+blue = "#61afef"
+yellow = "#e6db74"
+cyan = "#66d9ef"
+magenta = "#c678dd"
+gray = "#495162"
+white = "#f8f8f2"
+orange = "#fd971f"
 
-[keyword]
-fg = "#ff79c6"
+[styles]
+# Core Syntax Scopes
 
-[function]
-fg = "#50fa7b"
+attribute = { fg = "#a6e22e" }
+constant = { fg = "#bd93f9" }
+"constant.builtin" = { fg = "#bd93f9" }
+"constant.numeric" = { fg = "#bd93f9" }
+"constant.numeric.integer" = { fg = "#bd93f9" }
+"constant.numeric.float" = { fg = "#bd93f9" }
+"constant.character" = { fg = "#f1fa8c" }
+"constant.character.escape" = { fg = "#ff79c6" }
 
-[type]
-fg = "#ff79c6"
+constructor = { fg = "#8be9fd" }
 
-[string]
-fg = "#f1fa8c"
+function = { fg = "#50fa7b" }
+"function.builtin" = { fg = "#8be9fd" }
+"function.method" = { fg = "#50fa7b" }
+"function.macro" = { fg = "#ff79c6" }
 
-[comment]
-fg = "#6272a4"
+keyword = { fg = "#ff79c6" }
+"keyword.control" = { fg = "#ff79c6" }
+"keyword.control.conditional" = { fg = "#ff79c6" }
+"keyword.control.repeat" = { fg = "#ff79c6" }
+"keyword.control.import" = { fg = "#ff79c6" }
+"keyword.control.return" = { fg = "#ff79c6" }
+"keyword.control.exception" = { fg = "#ff79c6" }
+"keyword.operator" = { fg = "#ff79c6" }
+"keyword.directive" = { fg = "#bd93f9" }
+"keyword.function" = { fg = "#ff79c6" }
+"keyword.storage" = { fg = "#ff79c6" }
+"keyword.storage.type" = { fg = "#ff79c6" }
+"keyword.storage.modifier" = { fg = "#bd93f9" }
 
-[variable]
-fg = "#f8f8f2"
+label = { fg = "#ffb86c" }
 
-[operator]
-fg = "#ff79c6"
+operator = { fg = "#ff79c6" }
 
-[punctuation.bracket]
-fg = "#495162"
+punctuation = "#f8f8f2"
+"punctuation.delimiter" = "#6272a4"
+"punctuation.bracket" = "#f8f8f2"
+"punctuation.special" = "#ff79c6"
 
-[constant.numeric.integer]
-fg = "#bd93f9"
+special = { fg = "#ff79c6" }
 
-[constant.numeric.float]
-fg = "#bd93f9"
+string = { fg = "#f1fa8c" }
+"string.regexp" = { fg = "#ffb86c" }
+"string.special" = { fg = "#ff79c6" }
+"string.special.path" = { fg = "#f1fa8c" }
+"string.special.url" = { fg = "#f1fa8c" }
+"string.special.symbol" = { fg = "#ff79c6" }
+
+tag = { fg = "#ff79c6" }
+"tag.builtin" = { fg = "#ff79c6" }
+
+type = { fg = "#8be9fd" }
+"type.builtin" = { fg = "#8be9fd" }
+"type.enum" = { fg = "#8be9fd" }
+"type.enum.variant" = { fg = "#bd93f9" }
+"type.parameter" = { fg = "#f8f8f2" }
+
+variable = "#f8f8f2"
+"variable.builtin" = { fg = "#8be9fd" }
+
+namespace = { fg = "#ff79c6" }
+
+# Advanced Syntax Scopes
+
+"variable.parameter" = { fg = "#ffb86c" }
+"variable.other" = { fg = "#f8f8f2" }
+"variable.other.member" = { fg = "#ffb86c" }
+"variable.other.private" = { fg = "#ffb86c" }
+
+# Comments
+
+comment = { fg = "#6272a4", modifiers = ["italic"] }
+"comment.line" = { fg = "#6272a4", modifiers = ["italic"] }
+"comment.line.documentation" = { fg = "#6272a4", modifiers = ["italic", "bold"] }
+"comment.block" = { fg = "#6272a4", modifiers = ["italic"] }
+"comment.block.documentation" = { fg = "#6272a4", modifiers = ["italic", "bold"] }
+"comment.unused" = { fg = "#6272a4", modifiers = ["dim", "italic"] }
+
+# Markup Scopes
+
+"markup.heading" = { fg = "#ff79c6", modifiers = ["bold"] }
+"markup.heading.1" = { fg = "#ff79c6", modifiers = ["bold"] }
+"markup.heading.2" = { fg = "#8be9fd", modifiers = ["bold"] }
+"markup.heading.3" = { fg = "#50fa7b", modifiers = ["bold"] }
+"markup.heading.4" = { fg = "#f1fa8c", modifiers = ["bold"] }
+"markup.heading.5" = { fg = "#ffb86c", modifiers = ["bold"] }
+"markup.heading.6" = { fg = "#bd93f9", modifiers = ["bold"] }
+"markup.bold" = { modifiers = ["bold"] }
+"markup.italic" = { modifiers = ["italic"] }
+"markup.strikethrough" = { modifiers = ["crossed_out"] }
+"markup.link.url" = { fg = "#8be9fd", modifiers = ["underlined"] }
+"markup.link.text" = { fg = "#f8f8f2" }
+"markup.raw" = { fg = "#f1fa8c" }
+"markup.raw.inline" = { fg = "#f1fa8c" }
+"markup.raw.block" = { fg = "#f1fa8c" }
+"markup.quote" = { fg = "#6272a4" }
+"markup.list" = { fg = "#ff79c6" }
+"markup.list.unnumbered" = { fg = "#ff79c6" }
+"markup.list.numbered" = { fg = "#ff79c6" }
+"markup.list.checked" = { fg = "#50fa7b" }
+"markup.list.unchecked" = { fg = "#f8f8f2" }
+
+# Diff Scopes
+
+"diff.plus" = { fg = "#50fa7b" }
+"diff.plus.gutter" = { fg = "#50fa7b" }
+"diff.minus" = { fg = "#ff5555" }
+"diff.minus.gutter" = { fg = "#ff5555" }
+"diff.delta" = { fg = "#f1fa8c" }
+"diff.delta.moved" = { fg = "#ffb86c" }
+"diff.delta.conflict" = { fg = "#ff5555" }
+"diff.delta.gutter" = { fg = "#f1fa8c" }
+
+# Diagnostic Scopes
+
+diagnostic = { fg = "#f8f8f2" }
+"diagnostic.error" = { underline = { color = "#ff5555", style = "curl" } }
+"diagnostic.warning" = { underline = { color = "#f1fa8c", style = "curl" } }
+"diagnostic.info" = { underline = { color = "#8be9fd", style = "curl" } }
+"diagnostic.hint" = { underline = { color = "#50fa7b", style = "curl" } }
+"diagnostic.unnecessary" = { modifiers = ["dim"] }
+"diagnostic.deprecated" = { modifiers = ["crossed_out"] }
+
+# Editor UI styling
+[editor]
+background = { fg = "#f8f8f2", bg = "#272822" }
+whitespace = { fg = "#3e3d32" }
+cursor = { fg = "#272822", bg = "#f8f8f2" }
+line_number = { fg = "#90908a", bg = "#272822" }
+line_number_selected = { fg = "#f8f8f2" }
+selection = { fg = "#f8f8f2", bg = "#49483e" }
+primary_selection = { fg = "#f8f8f2", bg = "#5e5a4a" }
+indent_guide = { fg = "#3e3d32" }
+current_line = { bg = "#3e3d32" }
+
+# Status bar styling
+[status]
+normal = { fg = "#f8f8f2", bg = "#75715e" }
+insert = { fg = "#272822", bg = "#a6e22e" }
+select = { fg = "#272822", bg = "#66d9ef" }
+
+# Popup window styling
+[popup]
+background = { fg = "#f8f8f2", bg = "#272822" }
+border = { fg = "#75715e" }
+menu = { fg = "#f8f8f2" }
+menu_selected = { fg = "#272822", bg = "#a6e22e" }
+scrollbar = { fg = "#75715e" }
+scrollbar_thumb = { fg = "#90908a" }
+
+# General UI styling
+[ui]
+menu = { fg = "#f8f8f2" }
+menu_selected = { fg = "#272822", bg = "#a6e22e" }
+help = { fg = "#90908a" }
+cursorline = { bg = "#3e3d32" }
+cursorline_primary = { bg = "#3e3d32" }
+highlight = { fg = "#f8f8f2", bg = "#49483e" }
+window = { fg = "#f8f8f2", bg = "#272822" }
+window_border = { fg = "#75715e" }
+text_focus = { fg = "#f8f8f2" }
+text_inactive = { fg = "#90908a" }

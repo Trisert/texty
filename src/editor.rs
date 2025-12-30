@@ -10,8 +10,11 @@ use crate::lsp::diagnostics::DiagnosticManager;
 use crate::lsp::manager::LspManager;
 use crate::lsp::progress::ProgressManager;
 use crate::mode::Mode;
+use crate::motion::Position;
+use crate::registers::Registers;
 use crate::syntax::{LanguageId, LanguageRegistry, load_languages_config};
 use crate::ui::widgets::completion::CompletionPopup;
+use crate::vim_parser::VimParser;
 use crate::viewport::Viewport;
 use lsp_types::{Diagnostic, Url};
 use std::collections::HashMap;
@@ -45,6 +48,10 @@ pub struct Editor {
     pub command_history: Vec<String>,   // Command history
     pub status_message: Option<String>, // Temporary status message
     pub command_history_index: usize,   // Current position in history
+    // Vim-specific state
+    pub vim_parser: VimParser,
+    pub registers: Registers,
+    pub visual_start: Option<Position>,
 }
 
 impl Default for Editor {
@@ -90,6 +97,9 @@ impl Editor {
             command_history: Vec::new(),
             command_history_index: 0,
             status_message: None,
+            vim_parser: VimParser::new(),
+            registers: Registers::new(),
+            visual_start: None,
         }
     }
 
@@ -128,7 +138,17 @@ impl Editor {
                     let _ = self
                         .buffer
                         .insert_char(c, self.cursor.line, self.cursor.col);
-                    self.cursor.col += 1;
+
+                    // Handle cursor positioning based on character type
+                    if c == '\n' {
+                        // Move to beginning of next line after newline
+                        self.cursor.line += 1;
+                        self.cursor.col = 0;
+                    } else {
+                        // Normal character: advance column
+                        self.cursor.col += 1;
+                    }
+
                     self.notify_text_change();
                 } else if (self.mode == Mode::Normal || self.mode == Mode::FuzzySearch)
                     && self.fuzzy_search.is_some()
@@ -144,11 +164,19 @@ impl Editor {
             Command::DeleteChar => {
                 if self.mode == Mode::Insert {
                     if self.cursor.col > 0 {
+                        // Normal backspace: delete previous character in current line
                         let _ = self
                             .buffer
                             .delete_char(self.cursor.line, self.cursor.col - 1);
                         self.cursor.col -= 1;
+                    } else if self.cursor.col == 0 && self.cursor.line > 0 {
+                        // Backspace at line start: delete newline and join with previous line
+                        let prev_line_len = self.buffer.line_len(self.cursor.line - 1);
+                        let _ = self.buffer.delete_char(self.cursor.line, 0);
+                        self.cursor.line -= 1;
+                        self.cursor.col = prev_line_len;
                     }
+                    // If at (0, 0), do nothing (already at beginning of file)
                 } else if self.mode == Mode::Normal {
                     if self.fuzzy_search.is_some() {
                         // Handle backspace in fuzzy search
@@ -164,6 +192,12 @@ impl Editor {
                                 .buffer
                                 .delete_char(self.cursor.line, self.cursor.col - 1);
                             self.cursor.col -= 1;
+                        } else if self.cursor.col == 0 && self.cursor.line > 0 {
+                            // Backspace at line start in normal mode
+                            let prev_line_len = self.buffer.line_len(self.cursor.line - 1);
+                            let _ = self.buffer.delete_char(self.cursor.line, 0);
+                            self.cursor.line -= 1;
+                            self.cursor.col = prev_line_len;
                         }
                     }
                 } else if self.mode == Mode::FuzzySearch && self.fuzzy_search.is_some() {
@@ -357,7 +391,412 @@ impl Editor {
                 }
             }
 
-            _ => {}
+            // ===== Vim-style motion commands =====
+            Command::MoveWordForward(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut new_pos = pos;
+                for _ in 0..count {
+                    new_pos = motion::word_forward(&self.buffer, new_pos);
+                    // Clamp to buffer bounds
+                    new_pos.line = new_pos.line.min(self.buffer.line_count().saturating_sub(1));
+                    new_pos.col = new_pos.col.min(self.buffer.line_len(new_pos.line));
+                }
+                self.cursor.line = new_pos.line;
+                self.cursor.col = new_pos.col;
+            }
+            Command::MoveWordBackward(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut new_pos = pos;
+                for _ in 0..count {
+                    new_pos = motion::word_backward(&self.buffer, new_pos);
+                }
+                self.cursor.line = new_pos.line;
+                self.cursor.col = new_pos.col;
+            }
+            Command::MoveWordEnd(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut new_pos = pos;
+                for _ in 0..count {
+                    new_pos = motion::word_end(&self.buffer, new_pos);
+                    new_pos.line = new_pos.line.min(self.buffer.line_count().saturating_sub(1));
+                    new_pos.col = new_pos.col.min(self.buffer.line_len(new_pos.line).saturating_sub(1));
+                }
+                self.cursor.line = new_pos.line;
+                self.cursor.col = new_pos.col;
+            }
+            Command::MoveLineStart => {
+                self.cursor.col = 0;
+            }
+            Command::MoveLineEnd(count) => {
+                let target_line = (self.cursor.line + count - 1).min(self.buffer.line_count().saturating_sub(1));
+                self.cursor.line = target_line;
+                self.cursor.col = self.buffer.line_len(target_line).saturating_sub(1);
+            }
+            Command::MoveFirstNonBlank => {
+                use crate::motion;
+                let pos = motion::Position::new(self.cursor.line, self.cursor.col);
+                let new_pos = motion::first_non_blank(&self.buffer, pos);
+                self.cursor.col = new_pos.col;
+            }
+            Command::MoveFileStart => {
+                self.cursor.line = 0;
+                self.cursor.col = 0;
+            }
+            Command::MoveFileEnd => {
+                self.cursor.line = self.buffer.line_count().saturating_sub(1);
+                self.cursor.col = 0;
+            }
+            Command::MoveScreenTop => {
+                self.cursor.line = self.viewport.offset_line;
+            }
+            Command::MoveScreenMiddle => {
+                self.cursor.line = self.viewport.offset_line + self.viewport.rows / 2;
+            }
+            Command::MoveScreenBottom => {
+                self.cursor.line = (self.viewport.offset_line + self.viewport.rows).min(self.buffer.line_count().saturating_sub(1));
+            }
+
+            // ===== Vim-style delete commands =====
+            Command::DeleteCharForward(count) => {
+                if let Ok(_deleted) = self.buffer.delete_char_forward(self.cursor.line, self.cursor.col, count) {
+                    self.notify_text_change();
+                }
+            }
+            Command::ReplaceChar(ch) => {
+                if self.buffer.replace_char(self.cursor.line, self.cursor.col, ch).is_ok() {
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteLine => {
+                if let Ok(_deleted) = self.buffer.delete_line(self.cursor.line) {
+                    // Yank to registers
+                    // TODO: self.registers.yank(deleted, '"');
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteWord(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(pos, end_pos) {
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteToEnd => {
+                use crate::motion::{self, Position};
+                let start = Position::new(self.cursor.line, self.cursor.col);
+                let end = motion::line_end(&self.buffer, start);
+                if let Ok(_deleted) = self.buffer.delete_range(start, end) {
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteToStart => {
+                use crate::motion::Position;
+                let start = Position::new(self.cursor.line, 0);
+                let end = Position::new(self.cursor.line, self.cursor.col);
+                if let Ok(_deleted) = self.buffer.delete_range(start, end) {
+                    self.cursor.col = 0;
+                    self.notify_text_change();
+                }
+            }
+            Command::JoinLines(count) => {
+                for _ in 0..count {
+                    if self.buffer.join_lines(self.cursor.line).is_ok() {
+                        self.notify_text_change();
+                    }
+                }
+            }
+
+            // ===== Yank commands =====
+            Command::YankLine => {
+                let text = self.buffer.get_line_content(self.cursor.line);
+                // TODO: self.registers.yank(text, '"');
+                self.status_message = Some(format!("Yanked line ({} chars)", text.len()));
+            }
+            Command::YankToEnd => {
+                use crate::motion::{self, Position};
+                let start = Position::new(self.cursor.line, self.cursor.col);
+                let end = motion::line_end(&self.buffer, start);
+                let text = self.buffer.get_range(start, end);
+                // TODO: self.registers.yank(text, '"');
+                self.status_message = Some(format!("Yanked to end ({} chars)", text.len()));
+            }
+
+            // ===== Paste commands =====
+            Command::PasteAfter => {
+                // TODO: if let Some(text) = self.registers.get('"') {
+                //     let text = text.to_string();
+                //     if self.buffer.insert_text(&text, self.cursor.line, self.cursor.col + 1).is_ok() {
+                //         self.cursor.col += text.len();
+                //         self.notify_text_change();
+                //     }
+                // }
+            }
+            Command::PasteBefore => {
+                // TODO: if let Some(text) = self.registers.get('"') {
+                //     let text = text.to_string();
+                //     if self.buffer.insert_text(&text, self.cursor.line, self.cursor.col).is_ok() {
+                //         self.cursor.col += text.len();
+                //         self.notify_text_change();
+                //     }
+                // }
+            }
+
+            // ===== Change commands =====
+            Command::SubstituteChar => {
+                if self.buffer.delete_char(self.cursor.line, self.cursor.col).is_ok() {
+                    self.mode = Mode::Insert;
+                }
+            }
+            Command::SubstituteLine => {
+                self.cursor.col = 0;
+                if self.buffer.delete_range(
+                    crate::motion::Position::new(self.cursor.line, 0),
+                    crate::motion::Position::new(self.cursor.line, self.buffer.line_len(self.cursor.line)),
+                ).is_ok() {
+                    self.mode = Mode::Insert;
+                    self.notify_text_change();
+                }
+            }
+            Command::ChangeLine => {
+                self.cursor.col = 0;
+                if self.buffer.delete_line(self.cursor.line).is_ok() {
+                    self.mode = Mode::Insert;
+                    self.notify_text_change();
+                }
+            }
+            Command::ChangeWord(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(pos, end_pos) {
+                    self.mode = Mode::Insert;
+                    self.notify_text_change();
+                }
+            }
+            Command::ChangeToEnd => {
+                use crate::motion::{self, Position};
+                let start = Position::new(self.cursor.line, self.cursor.col);
+                let end = motion::line_end(&self.buffer, start);
+                if let Ok(_deleted) = self.buffer.delete_range(start, end) {
+                    self.mode = Mode::Insert;
+                    self.notify_text_change();
+                }
+            }
+
+            // ===== Visual mode =====
+            Command::VisualChar => {
+                self.mode = Mode::Visual;
+                self.status_message = Some("-- VISUAL --".to_string());
+            }
+            Command::VisualLine => {
+                self.mode = Mode::Visual;
+                self.status_message = Some("-- VISUAL LINE --".to_string());
+            }
+
+            // ===== Undo/Redo =====
+            Command::Undo => {
+                // TODO: implement undo
+                self.status_message = Some("Undo not yet implemented".to_string());
+            }
+            Command::Redo => {
+                // TODO: implement redo
+                self.status_message = Some("Redo not yet implemented".to_string());
+            }
+
+            Command::DeleteToStartWord(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut start_pos = pos;
+                for _ in 0..count {
+                    start_pos = motion::word_backward(&self.buffer, start_pos);
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(start_pos, pos) {
+                    self.cursor.line = start_pos.line;
+                    self.cursor.col = start_pos.col;
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteToEndWord(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_end(&self.buffer, end_pos);
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(pos, end_pos) {
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteInnerWord(count) => {
+                // Inner word - similar to DeleteWord but more precise
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                // Remove trailing whitespace
+                while end_pos.col > 0 && self.cursor.line == end_pos.line {
+                    let line = self.buffer.line(end_pos.line).unwrap_or_default();
+                    let chars: Vec<char> = line.chars().collect();
+                    if end_pos.col < chars.len() && chars[end_pos.col].is_whitespace() {
+                        end_pos.col -= 1;
+                    } else {
+                        break;
+                    }
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(pos, end_pos) {
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteAWord(count) => {
+                // A word - includes trailing space (same as DeleteWord for now)
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(pos, end_pos) {
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteToEndOfFile => {
+                use crate::motion::Position;
+                let start = Position::new(self.cursor.line, self.cursor.col);
+                let end = Position::new(self.buffer.line_count().saturating_sub(1), 0);
+                if let Ok(_deleted) = self.buffer.delete_range(start, end) {
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteToStartOfFile => {
+                use crate::motion::Position;
+                let start = Position::new(0, 0);
+                let end = Position::new(self.cursor.line, self.cursor.col);
+                if let Ok(_deleted) = self.buffer.delete_range(start, end) {
+                    self.cursor.line = 0;
+                    self.cursor.col = 0;
+                    self.notify_text_change();
+                }
+            }
+            Command::DeleteLineIntoRegister(_reg) => {
+                if let Ok(_deleted) = self.buffer.delete_line(self.cursor.line) {
+                    // TODO: self.registers.yank(deleted, reg);
+                    self.notify_text_change();
+                }
+            }
+            Command::YankWord(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                let text = self.buffer.get_range(pos, end_pos);
+                // TODO: self.registers.yank(text, '"');
+                self.status_message = Some(format!("Yanked word ({} chars)", text.len()));
+            }
+            Command::YankToStart => {
+                use crate::motion::Position;
+                let start = Position::new(self.cursor.line, 0);
+                let end = Position::new(self.cursor.line, self.cursor.col);
+                let text = self.buffer.get_range(start, end);
+                // TODO: self.registers.yank(text, '"');
+                self.status_message = Some(format!("Yanked to start ({} chars)", text.len()));
+            }
+            Command::YankInnerWord(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                // Remove trailing whitespace
+                while end_pos.col > 0 && self.cursor.line == end_pos.line {
+                    let line = self.buffer.line(end_pos.line).unwrap_or_default();
+                    let chars: Vec<char> = line.chars().collect();
+                    if end_pos.col < chars.len() && chars[end_pos.col].is_whitespace() {
+                        end_pos.col -= 1;
+                    } else {
+                        break;
+                    }
+                }
+                let text = self.buffer.get_range(pos, end_pos);
+                // TODO: self.registers.yank(text, '"');
+                self.status_message = Some(format!("Yanked inner word ({} chars)", text.len()));
+            }
+            Command::YankAWord(count) => {
+                // Same as YankWord for now
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                let text = self.buffer.get_range(pos, end_pos);
+                // TODO: self.registers.yank(text, '"');
+                self.status_message = Some(format!("Yanked word ({} chars)", text.len()));
+            }
+            Command::ChangeToStart => {
+                use crate::motion::Position;
+                let start = Position::new(self.cursor.line, 0);
+                let end = Position::new(self.cursor.line, self.cursor.col);
+                if let Ok(_deleted) = self.buffer.delete_range(start, end) {
+                    self.cursor.col = 0;
+                    self.mode = Mode::Insert;
+                    self.notify_text_change();
+                }
+            }
+            Command::ChangeInnerWord(count) => {
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(pos, end_pos) {
+                    self.mode = Mode::Insert;
+                    self.notify_text_change();
+                }
+            }
+            Command::ChangeAWord(count) => {
+                // Same as ChangeWord for now
+                use crate::motion::{self, Position};
+                let pos = Position::new(self.cursor.line, self.cursor.col);
+                let mut end_pos = pos;
+                for _ in 0..count {
+                    end_pos = motion::word_forward(&self.buffer, end_pos);
+                }
+                if let Ok(_deleted) = self.buffer.delete_range(pos, end_pos) {
+                    self.mode = Mode::Insert;
+                    self.notify_text_change();
+                }
+            }
+            Command::IndentLine(count) => {
+                if self.buffer.indent_range(self.cursor.line, self.cursor.line + count - 1, 4).is_ok() {
+                    self.notify_text_change();
+                }
+            }
+            Command::UnindentLine(count) => {
+                if self.buffer.unindent_range(self.cursor.line, self.cursor.line + count - 1, 4).is_ok() {
+                    self.notify_text_change();
+                }
+            }
+
+            _ => {
+                // Unknown command
+                self.status_message = Some(format!("Unknown command: {:?}", cmd));
+            }
         }
         // Update desired_col
         self.cursor.desired_col = self.cursor.col;

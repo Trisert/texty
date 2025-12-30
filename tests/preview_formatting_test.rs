@@ -74,7 +74,7 @@ fn main() {
                 !preview_buffer
                     .syntax_highlights
                     .as_ref()
-                    .map_or(true, |v| v.is_empty()),
+                    .is_none_or(|v| v.is_empty()),
                 "Should have syntax highlights for Rust code"
             );
 

@@ -1,0 +1,39 @@
+[palette]
+Red = "#bf616a"
+Green = "#a3be8c"
+Blue = "#5e81ac"
+Yellow = "#ebcb8b"
+Cyan = "#88c0d0"
+Magenta = "#b48ead"
+Gray = "#4c566a"
+White = "#eceff4"
+
+[keyword]
+fg = "#81a1c1"
+
+[function]
+fg = "#88c0d0"
+
+[type]
+fg = "#8fbcbb"
+
+[string]
+fg = "#a3be8c"
+
+[comment]
+fg = "#616e88"
+
+[variable]
+fg = "#eceff4"
+
+[operator]
+fg = "#81a1c1"
+
+[punctuation.bracket]
+fg = "#d8dee9"
+
+[constant.numeric.integer]
+fg = "#b48ead"
+
+[constant.numeric.float]
+fg = "#b48ead"

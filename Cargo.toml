@@ -10,15 +10,15 @@ unicode-segmentation = "1.10"
 ratatui = "0.26"
 toml = "0.8"
 
-# Syntax highlighting
+# Syntax highlighting - optional for faster dev builds
 tree-sitter = "0.20"
-tree-sitter-rust = "0.20"
-tree-sitter-python = "0.20"
-tree-sitter-javascript = "0.20"
-tree-sitter-typescript = "0.20"
+tree-sitter-rust = { version = "0.20", optional = true }
+tree-sitter-python = { version = "0.20", optional = true }
+tree-sitter-javascript = { version = "0.20", optional = true }
+tree-sitter-typescript = { version = "0.20", optional = true }
 
 # Clipboard
-arboard = "3.6"
+arboard = { version = "3.6", optional = true }
 
 # Config
 dirs = "6.0.0"
@@ -31,17 +31,43 @@ ignore = "0.4"
 # CLI
 clap = { version = "4.0", features = ["derive"] }
 
-# LSP
+# LSP - optimized tokio features (was "full", now only what we use)
 lsp-types = "0.95"
 lsp-server = "0.7"
-tokio = { version = "1", features = ["full"] }
-tokio-util = "0.7"
-futures = "0.3"
+# Only include features we actually use: macros, sync, time, rt-multi-thread
+# This is MUCH faster to compile than features = ["full"]
+tokio = { version = "1", default-features = false, features = ["macros", "sync", "time", "rt-multi-thread"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 async-trait = "0.1"
 thiserror = "1.0"
 anyhow = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+[features]
+default = ["rust", "python", "javascript", "typescript", "clipboard"]
+
+# Language syntax highlighting - enable selectively for faster dev builds
+rust = ["tree-sitter-rust"]
+python = ["tree-sitter-python"]
+javascript = ["tree-sitter-javascript"]
+typescript = ["tree-sitter-typescript"]
+all-languages = ["rust", "python", "javascript", "typescript"]
+
+# Clipboard support (optional for systems without X11/Wayland)
+clipboard = ["arboard"]
+
+# Minimal feature set for fastest compilation (no languages, no clipboard)
+minimal = []
+
+[profile.dev]
+# Optimize dependencies even in dev mode for faster compilation
+opt-level = 0
+[profile.dev.package."*"]
+opt-level = 3
 
 [dev-dependencies]
 proptest = "1.0"

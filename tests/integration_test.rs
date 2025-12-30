@@ -56,6 +56,15 @@ fn test_syntax_highlighting() {
     // Check that highlighter is initialized
     assert!(editor.buffer.highlighter.is_some());
 
+    println!(
+        "Highlighter exists: {}",
+        editor.buffer.highlighter.is_some()
+    );
+    if let Some(ref hl) = editor.buffer.highlighter {
+        println!("Highlighter tree exists: {}", hl.get_tree().is_some());
+        println!("Highlighter highlights len: {}", hl.get_highlights_len());
+    }
+
     // Check highlights for first line
     let highlights = editor
         .buffer
@@ -63,6 +72,19 @@ fn test_syntax_highlighting() {
         .as_ref()
         .unwrap()
         .get_line_highlights(0);
+
+    println!("Highlights for line 0: {:?}", highlights);
+
+    if let Some(hl) = &highlights {
+        println!("Number of highlight tokens: {}", hl.len());
+        for (i, token) in hl.iter().enumerate() {
+            println!(
+                "  Token {}: start={}, end={}, capture_name={:?}",
+                i, token.start, token.end, token.capture_name
+            );
+        }
+    }
+
     assert!(highlights.is_some(), "Should have highlights on line 0");
     // At least one highlight (fn keyword)
     assert!(
@@ -332,7 +354,7 @@ fn test_ui_widgets() {
     // Test theme color methods
     assert_eq!(
         theme.syntax_color("keyword"),
-        ratatui::style::Color::Rgb(255, 121, 198)
+        ratatui::style::Color::Rgb(198, 120, 221)
     );
 }
 

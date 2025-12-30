@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn test_clipboard_creation() {
         let _clipboard = Clipboard::default();
-        assert!(true); // Basic creation test
+        // Basic creation test - just verify it doesn't panic
     }
 
     #[test]
