@@ -5,7 +5,7 @@ use crossterm::{
 use std::time::{Duration, Instant};
 use texty::cli;
 use texty::ui::renderer::TuiRenderer;
-use texty::{command::Command, editor::Editor, mode::Mode};
+use texty::{command::Command, editor::Editor, mode::Mode, vim_parser::ParseResult};
 
 // Global state for double space detection
 static mut LAST_SPACE_TIME: Option<Instant> = None;
@@ -39,6 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     };
+
+    // Initialize logger (set RUST_LOG env var to control verbosity)
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
     // Enable raw mode and enter alternate screen
     enable_raw_mode()?;
@@ -104,8 +109,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             break;
                         }
                     }
+                    Mode::Normal | Mode::Visual => {
+                        // Use Vim parser for multi-key command sequences
+                        match editor.vim_parser.process_key(key_event) {
+                            ParseResult::Command(cmd) => {
+                                if editor.execute_command(cmd) {
+                                    break; // Quit
+                                }
+                            }
+                            ParseResult::Pending => {
+                                // Continue waiting for more keys (multi-key sequence)
+                            }
+                            ParseResult::Invalid => {
+                                // Invalid sequence, reset parser
+                                editor.vim_parser.reset();
+                                editor.status_message = Some("Invalid command".to_string());
+                            }
+                        }
+                    }
                     _ => {
-                        // Handle normal commands
+                        // Handle other modes with simple key_to_command
                         let command = key_to_command(key_event, &editor.mode);
                         if let Some(cmd) = command
                             && editor.execute_command(cmd)

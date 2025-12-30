@@ -4,7 +4,7 @@ use lsp_types::DiagnosticSeverity;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::Style,
+    style::{Style, Stylize},
     text::{Line, Span},
     widgets::Widget,
 };
@@ -42,14 +42,15 @@ impl EditorPane<'_> {
         }
     }
 
-    fn diagnostic_color(&self, severity: &Option<DiagnosticSeverity>) -> ratatui::style::Color {
-        match severity {
+    fn diagnostic_style(&self, severity: &Option<DiagnosticSeverity>) -> ratatui::style::Style {
+        let color = match severity {
             Some(DiagnosticSeverity::ERROR) => self.theme.ui.diagnostic_error,
             Some(DiagnosticSeverity::WARNING) => self.theme.ui.diagnostic_warning,
             Some(DiagnosticSeverity::INFORMATION) => self.theme.ui.diagnostic_info,
             Some(DiagnosticSeverity::HINT) => self.theme.ui.diagnostic_hint,
             _ => self.theme.ui.diagnostic_error,
-        }
+        };
+        ratatui::style::Style::default().fg(color).underlined()
     }
 }
 
@@ -117,11 +118,18 @@ impl Widget for EditorPane<'_> {
                                 .min(self.editor.viewport.offset_col + visible_line.len())
                                 .saturating_sub(self.editor.viewport.offset_col);
 
-                            highlight_ranges.push((
-                                start,
-                                end,
-                                self.theme.syntax_color(&token.capture_name),
-                            ));
+                            // Use Helix-compatible theme if loaded, otherwise use fallback
+                            let style =
+                                if let Some(ref loaded_theme) = self.theme.loaded_syntax_theme {
+                                    loaded_theme
+                                        .get_style(&token.capture_name)
+                                        .to_ratatui_style()
+                                } else {
+                                    ratatui::style::Style::default()
+                                        .fg(self.theme.syntax_color(&token.capture_name))
+                                };
+
+                            highlight_ranges.push((start, end, style));
                         }
                     }
 
@@ -138,26 +146,26 @@ impl Widget for EditorPane<'_> {
                                 .min(self.editor.viewport.offset_col + visible_line.len())
                                 .saturating_sub(self.editor.viewport.offset_col);
 
-                            let diag_color = self.diagnostic_color(&diag.severity);
-                            highlight_ranges.push((start, end, diag_color));
+                            let diag_style = self.diagnostic_style(&diag.severity);
+                            highlight_ranges.push((start, end, diag_style));
                         }
                     }
 
                     // Sort ranges by start position and merge overlapping
                     highlight_ranges.sort_by_key(|(start, _, _)| *start);
-                    let mut merged_ranges: Vec<(usize, usize, ratatui::style::Color)> = Vec::new();
-                    for (start, end, color) in highlight_ranges {
+                    let mut merged_ranges: Vec<(usize, usize, ratatui::style::Style)> = Vec::new();
+                    for (start, end, style) in highlight_ranges {
                         if let Some((_, last_end, _)) = merged_ranges.last_mut()
                             && *last_end >= start
                         {
                             *last_end = (*last_end).max(end);
                             continue;
                         }
-                        merged_ranges.push((start, end, color));
+                        merged_ranges.push((start, end, style));
                     }
 
                     // Build spans from merged ranges
-                    for (start, end, color) in merged_ranges {
+                    for (start, end, style) in merged_ranges {
                         if start > pos {
                             let start_idx = start.min(visible_line.len());
                             spans.push(Span::styled(
@@ -169,7 +177,7 @@ impl Widget for EditorPane<'_> {
                         let clamped_start = start.min(end_idx);
                         spans.push(Span::styled(
                             visible_line[clamped_start..end_idx].to_string(),
-                            Style::default().fg(color),
+                            style,
                         ));
                         pos = end;
                     }

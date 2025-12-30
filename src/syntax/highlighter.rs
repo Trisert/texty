@@ -1,4 +1,5 @@
 use crate::syntax::{LanguageConfig, QueryLoader};
+use log::{debug, trace};
 use std::collections::HashMap;
 use tree_sitter::{Parser, Query, Tree};
 
@@ -58,6 +59,15 @@ impl SyntaxHighlighter {
         if let Some(tree) = &self.tree {
             let language = (self.language_config.tree_sitter_language)();
 
+            debug!(
+                "Language highlight_query_path: {:?}",
+                self.language_config.highlight_query_path
+            );
+            debug!(
+                "Language highlight_query_fallback: {:?}",
+                self.language_config.highlight_query_fallback
+            );
+
             // Load and apply main highlight query
             if let Ok(query) = self.query_loader.load_query(
                 language,
@@ -67,7 +77,10 @@ impl SyntaxHighlighter {
                     .unwrap_or(""),
                 Some(self.language_config.highlight_query_fallback),
             ) {
+                debug!("Query loaded successfully");
                 Self::apply_query(&mut self.highlights, text, tree, query);
+            } else {
+                debug!("Failed to load query");
             }
 
             // Load and apply injection queries
@@ -108,8 +121,10 @@ impl SyntaxHighlighter {
         let mut cursor = tree_sitter::QueryCursor::new();
         let captures = cursor.captures(query, tree.root_node(), text.as_bytes());
 
+        let mut capture_count = 0;
         for (mat, _) in captures {
             for capture in mat.captures {
+                capture_count += 1;
                 let capture_name = &query.capture_names()[capture.index as usize];
                 let start = capture.node.start_byte();
                 let end = capture.node.end_byte();
@@ -122,10 +137,24 @@ impl SyntaxHighlighter {
                 });
             }
         }
+
+        if capture_count == 0 {
+            trace!("No captures found from query");
+        } else {
+            trace!("Found {} captures", capture_count);
+        }
     }
 
     pub fn get_line_highlights(&self, line: usize) -> Option<&Vec<HighlightToken>> {
         self.highlights.get(&line)
+    }
+
+    pub fn get_tree(&self) -> &Option<Tree> {
+        &self.tree
+    }
+
+    pub fn get_highlights_len(&self) -> usize {
+        self.highlights.len()
     }
 }
 

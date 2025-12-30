@@ -2,6 +2,7 @@
 
 pub mod buffer;
 pub mod cli;
+#[cfg(feature = "clipboard")]
 pub mod clipboard;
 pub mod command;
 pub mod config;
@@ -12,7 +13,10 @@ pub mod fuzzy_search;
 pub mod keymap;
 pub mod lsp;
 pub mod mode;
+pub mod motion;
+pub mod registers;
 pub mod syntax;
 pub mod theme_discovery;
 pub mod ui;
 pub mod viewport;
+pub mod vim_parser;

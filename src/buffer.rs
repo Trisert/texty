@@ -1,4 +1,5 @@
 use crate::syntax::{LanguageId, LanguageRegistry, SyntaxHighlighter, get_language_config};
+use crate::motion::Position;
 use ropey::Rope;
 use std::fs;
 use std::path::Path;
@@ -249,6 +250,218 @@ impl Buffer {
             })?;
         }
         Ok(())
+    }
+
+    // ===== Vim-style operations =====
+
+    /// Delete a range of text and return it (for yanking)
+    pub fn delete_range(&mut self, start: Position, end: Position) -> Result<String, BufferError> {
+        // Ensure start <= end
+        let (start, end) = if start.line < end.line
+            || (start.line == end.line && start.col <= end.col)
+        {
+            (start, end)
+        } else {
+            (end, start)
+        };
+
+        let start_char = self.rope.line_to_char(start.line) + start.col;
+        let end_char = self.rope.line_to_char(end.line) + end.col;
+
+        // Extract the text first (for yanking)
+        let deleted = self.rope.slice(start_char..end_char).to_string();
+
+        // Delete the range
+        self.rope.remove(start_char..end_char);
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(deleted)
+    }
+
+    /// Delete an entire line and return it
+    pub fn delete_line(&mut self, line: usize) -> Result<String, BufferError> {
+        if line >= self.line_count() {
+            return Ok(String::new());
+        }
+
+        let line_start = self.rope.line_to_char(line);
+        let line_end = self.rope.line_to_char(line + 1);
+
+        let deleted = self.rope.slice(line_start..line_end).to_string();
+        self.rope.remove(line_start..line_end);
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(deleted)
+    }
+
+    /// Delete multiple lines and return them
+    pub fn delete_lines(&mut self, start_line: usize, count: usize) -> Result<String, BufferError> {
+        let end_line = (start_line + count).min(self.line_count());
+
+        let start_char = self.rope.line_to_char(start_line);
+        let end_char = self.rope.line_to_char(end_line);
+
+        let deleted = self.rope.slice(start_char..end_char).to_string();
+        self.rope.remove(start_char..end_char);
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(deleted)
+    }
+
+    /// Get text in a range without deleting (for yanking)
+    pub fn get_range(&self, start: Position, end: Position) -> String {
+        // Ensure start <= end
+        let (start, end) = if start.line < end.line
+            || (start.line == end.line && start.col <= end.col)
+        {
+            (start, end)
+        } else {
+            (end, start)
+        };
+
+        let start_char = self.rope.line_to_char(start.line) + start.col;
+        let end_char = self.rope.line_to_char(end.line) + end.col;
+
+        self.rope.slice(start_char..end_char).to_string()
+    }
+
+    /// Get a line's content without the newline
+    pub fn get_line_content(&self, line: usize) -> String {
+        self.line(line).unwrap_or_default()
+    }
+
+    /// Join current line with next line
+    pub fn join_lines(&mut self, line: usize) -> Result<(), BufferError> {
+        if line + 1 >= self.line_count() {
+            return Ok(());
+        }
+
+        // Find the end of current line (before newline)
+        let current_line_end = self.rope.line_to_char(line + 1) - 1;
+        let next_line_start = self.rope.line_to_char(line + 1);
+
+        // Remove newline
+        self.rope.remove(current_line_end..next_line_start);
+
+        // Add a space if there isn't one
+        let space_pos = self.rope.line_to_char(line + 1) - 1;
+        if self.rope.len_chars() > space_pos {
+            let last_char = self.rope.char(space_pos);
+            if !last_char.is_whitespace() {
+                self.rope.insert_char(space_pos + 1, ' ');
+            }
+        }
+
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(())
+    }
+
+    /// Delete character(s) forward (Vim's `x`)
+    pub fn delete_char_forward(&mut self, line: usize, col: usize, count: usize) -> Result<String, BufferError> {
+        let line_len = self.line_len(line);
+        if col >= line_len {
+            return Ok(String::new());
+        }
+
+        let char_idx = self.rope.line_to_char(line) + col;
+        let end_idx = (char_idx + count).min(self.rope.len_chars());
+
+        let deleted = self.rope.slice(char_idx..end_idx).to_string();
+        self.rope.remove(char_idx..end_idx);
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(deleted)
+    }
+
+    /// Replace character at position with new character
+    pub fn replace_char(&mut self, line: usize, col: usize, new_char: char) -> Result<(), BufferError> {
+        let line_len = self.line_len(line);
+        if col >= line_len {
+            return Ok(());
+        }
+
+        let char_idx = self.rope.line_to_char(line) + col;
+        self.rope.remove(char_idx..char_idx + 1);
+        self.rope.insert_char(char_idx, new_char);
+
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(())
+    }
+
+    /// Indent a range of lines
+    pub fn indent_range(&mut self, start_line: usize, end_line: usize, amount: usize) -> Result<(), BufferError> {
+        let indent_str = " ".repeat(amount);
+
+        for line in (start_line..=end_line.min(self.line_count().saturating_sub(1))).rev() {
+            let line_start = self.rope.line_to_char(line);
+            self.rope.insert(line_start, &indent_str);
+        }
+
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(())
+    }
+
+    /// Unindent a range of lines
+    pub fn unindent_range(&mut self, start_line: usize, end_line: usize, amount: usize) -> Result<(), BufferError> {
+        let indent_str = " ".repeat(amount);
+
+        for line in start_line..=end_line.min(self.line_count().saturating_sub(1)) {
+            if let Some(line_content) = self.line(line) {
+                if line_content.starts_with(&indent_str) {
+                    let line_start = self.rope.line_to_char(line);
+                    let line_end = line_start + indent_str.len();
+                    self.rope.remove(line_start..line_end);
+                } else {
+                    // Remove as many spaces as possible up to amount
+                    let line_start = self.rope.line_to_char(line);
+                    let remove_count = line_content
+                        .chars()
+                        .take(amount)
+                        .take_while(|c| *c == ' ')
+                        .count();
+                    if remove_count > 0 {
+                        let line_end = line_start + remove_count;
+                        self.rope.remove(line_start..line_end);
+                    }
+                }
+            }
+        }
+
+        self.modified = true;
+        self.version += 1;
+        self.update_highlighter().ok();
+
+        Ok(())
+    }
+
+    /// Convert Position to character index
+    pub fn position_to_char(&self, pos: Position) -> usize {
+        self.rope.line_to_char(pos.line) + pos.col
+    }
+
+    /// Convert character index to Position
+    pub fn char_to_position(&self, char_idx: usize) -> Position {
+        let line = self.rope.char_to_line(char_idx);
+        let line_start = self.rope.line_to_char(line);
+        let col = char_idx - line_start;
+        Position::new(line, col)
     }
 }
 

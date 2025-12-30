@@ -1,10 +1,11 @@
 // src/ui/widgets/completion.rs - Completion popup widget
 
+use crate::ui::theme::Theme;
 use lsp_types::CompletionItem;
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Padding, Paragraph, Widget},
 };
@@ -14,6 +15,7 @@ pub struct CompletionPopup {
     pub selected_index: usize,
     pub max_visible: usize,
     pub scroll_offset: usize,
+    pub theme: Theme,
 }
 
 impl Default for CompletionPopup {
@@ -29,7 +31,12 @@ impl CompletionPopup {
             selected_index: 0,
             max_visible: 10,
             scroll_offset: 0,
+            theme: Theme::default(),
         }
+    }
+
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
     }
 
     pub fn set_items(&mut self, items: Vec<CompletionItem>) {
@@ -149,9 +156,11 @@ impl Widget for &CompletionPopup {
             let mut spans = vec![Span::styled(
                 label,
                 if is_selected {
-                    Style::default().fg(Color::Black).bg(Color::White)
+                    Style::default()
+                        .fg(self.theme.popup.highlight_fg)
+                        .bg(self.theme.popup.highlight_bg)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(self.theme.popup.foreground)
                 },
             )];
 
@@ -160,11 +169,13 @@ impl Widget for &CompletionPopup {
                     format!(" - {}", detail),
                     if is_selected {
                         Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::White)
+                            .fg(self.theme.popup.highlight_fg)
+                            .bg(self.theme.popup.highlight_bg)
                             .add_modifier(Modifier::DIM)
                     } else {
-                        Style::default().fg(Color::Gray).add_modifier(Modifier::DIM)
+                        Style::default()
+                            .fg(self.theme.general.foreground)
+                            .add_modifier(Modifier::DIM)
                     },
                 ));
             }

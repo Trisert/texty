@@ -361,8 +361,8 @@ impl FileType {
     /// # Examples
     ///
     /// ```
-    /// assert_eq!(crate::FileType::Source.bonus_score(), 500);
-    /// assert_eq!(crate::FileType::Binary.bonus_score(), -100);
+    /// assert_eq!(texty::fuzzy_search::FileType::Source.bonus_score(), 500);
+    /// assert_eq!(texty::fuzzy_search::FileType::Binary.bonus_score(), -100);
     /// ```
     pub fn bonus_score(&self) -> i32 {
         match self {
@@ -722,7 +722,7 @@ impl FuzzySearchState {
     /// # Examples
     ///
     /// ```
-    /// let mut state = FuzzySearchState::new(); // starts with default path and empty query
+    /// let mut state = texty::fuzzy_search::FuzzySearchState::new(); // starts with default path and empty query
     /// state.update_query("main".to_string());
     /// assert_eq!(state.query, "main");
     /// // filtered_items, displayed_count, and current_preview are updated by the call
@@ -1057,7 +1057,7 @@ impl FuzzySearchState {
     /// # Examples
     ///
     /// ```
-    /// let mut state = FuzzySearchState::new();
+    /// let mut state = texty::fuzzy_search::FuzzySearchState::new();
     /// state.toggle_gitignore(); // Disable gitignore filtering
     /// state.toggle_gitignore(); // Re-enable gitignore filtering
     /// ```
@@ -1108,7 +1108,7 @@ impl FuzzySearchState {
 /// # Examples
 ///
 /// ```
-/// let items = scan_directory(&PathBuf::from("."), true);
+/// let items = texty::fuzzy_search::scan_directory(&std::path::PathBuf::from("."), true);
 /// ```
 pub fn scan_directory(path: &PathBuf, follow_gitignore: bool) -> Vec<FileItem> {
     let mut items = Vec::new();
@@ -1181,7 +1181,7 @@ pub fn scan_directory(path: &PathBuf, follow_gitignore: bool) -> Vec<FileItem> {
 /// # Examples
 ///
 /// ```
-/// let items = scan_directory_recursive(&PathBuf::from("."), 0, true);
+/// let items = texty::fuzzy_search::scan_directory_recursive(&std::path::PathBuf::from("."), 0, true);
 /// ```
 pub fn scan_directory_recursive(
     path: &PathBuf,
@@ -2094,7 +2094,7 @@ mod tests {
         let now = SystemTime::now();
         let two_hours_ago = now - std::time::Duration::from_secs(7200);
         let bonus = recency_bonus(&two_hours_ago);
-        assert!(bonus >= 0 && bonus < 500);
+        assert!((0..500).contains(&bonus));
     }
 
     #[test]

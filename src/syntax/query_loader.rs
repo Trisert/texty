@@ -1,3 +1,4 @@
+use log::{debug, trace};
 use std::collections::HashMap;
 use std::fs;
 use tree_sitter::Query;
@@ -26,8 +27,15 @@ impl QueryLoader {
 
         if !self.cache.contains_key(&cache_key) {
             let query_source = match fs::read_to_string(path) {
-                Ok(content) => content,
-                Err(_) => {
+                Ok(content) => {
+                    debug!("Loaded query from file: {}", path);
+                    content
+                }
+                Err(e) => {
+                    debug!(
+                        "Failed to load query from file {}: {}, using fallback",
+                        path, e
+                    );
                     // Fallback to embedded query if file doesn't exist
                     fallback_query
                         .ok_or_else(|| {
@@ -37,7 +45,19 @@ impl QueryLoader {
                 }
             };
 
-            let query = Query::new(language, &query_source)?;
+            trace!("Query source length: {}", query_source.len());
+            trace!(
+                "First 200 chars: {}",
+                &query_source[..200.min(query_source.len())]
+            );
+
+            let query = match Query::new(language, &query_source) {
+                Ok(q) => q,
+                Err(e) => {
+                    debug!("Query::new failed: {:?}", e);
+                    return Err(Box::new(e) as Box<dyn std::error::Error>);
+                }
+            };
             self.cache.insert(cache_key.clone(), query);
         }
 

@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn test_parse_no_args() {
-        let args = CliArgs::parse_from(&["texty"]);
+        let args = CliArgs::parse_from(["texty"]);
         assert!(args.file.is_none());
         assert_eq!(args.theme, "monokai");
     }
@@ -80,7 +80,7 @@ mod tests {
     /// ```
     #[test]
     fn test_parse_with_theme() {
-        let args = CliArgs::parse_from(&["texty", "--theme", "monokai"]);
+        let args = CliArgs::parse_from(["texty", "--theme", "monokai"]);
         assert_eq!(args.theme, "monokai");
     }
 

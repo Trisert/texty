@@ -1,6 +1,7 @@
 // src/lsp/client.rs - LSP Client implementation (Helix-style async architecture)
 
 use super::transport::{Transport, TransportError};
+use log::warn;
 use lsp_types::*;
 use lsp_types::{
     ClientCapabilities,
@@ -349,7 +350,7 @@ impl LspClient {
 
             if attempts <= 3 {
                 // Max 3 restart attempts
-                eprintln!(
+                warn!(
                     "LSP server unhealthy, attempting restart (attempt {})",
                     attempts
                 );

@@ -5,7 +5,7 @@ use crate::ui::widgets::preview::render_preview_content;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
 };
@@ -129,7 +129,7 @@ impl<'a> FuzzySearchWidget<'a> {
         let search_text = format!("> {}", self.state.query);
         let search_paragraph = Paragraph::new(search_text)
             .block(search_block)
-            .style(Style::default().fg(Color::White));
+            .style(Style::default().fg(self.theme.popup.foreground));
 
         search_paragraph.render(area, buf);
     }
@@ -194,16 +194,18 @@ impl<'a> FuzzySearchWidget<'a> {
 
                         spans.push(Span::styled(
                             path_part.to_string(),
-                            Style::default().fg(Color::Gray),
+                            Style::default()
+                                .fg(self.theme.general.foreground)
+                                .add_modifier(Modifier::DIM),
                         ));
                         spans.push(Span::styled(
                             file_part.to_string(),
-                            Style::default().fg(Color::White),
+                            Style::default().fg(self.theme.popup.foreground),
                         ));
                     } else {
                         spans.push(Span::styled(
                             relative_path,
-                            Style::default().fg(Color::White),
+                            Style::default().fg(self.theme.popup.foreground),
                         ));
                     }
                 } else {
@@ -213,7 +215,10 @@ impl<'a> FuzzySearchWidget<'a> {
                     } else {
                         relative_path + "/"
                     };
-                    spans.push(Span::styled(display_path, Style::default().fg(Color::Cyan)));
+                    spans.push(Span::styled(
+                        display_path,
+                        Style::default().fg(self.theme.syntax.r#type),
+                    ));
                 }
             } else {
                 // Non-recursive mode (original behavior)
@@ -225,36 +230,46 @@ impl<'a> FuzzySearchWidget<'a> {
 
                         spans.push(Span::styled(
                             path_part.to_string(),
-                            Style::default().fg(Color::Gray),
+                            Style::default()
+                                .fg(self.theme.general.foreground)
+                                .add_modifier(Modifier::DIM),
                         ));
                         spans.push(Span::styled(
                             file_part.to_string(),
-                            Style::default().fg(Color::White),
+                            Style::default().fg(self.theme.popup.foreground),
                         ));
                     } else {
                         // No path separator, just show the filename
-                        spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+                        spans.push(Span::styled(
+                            full_path,
+                            Style::default().fg(self.theme.popup.foreground),
+                        ));
                     }
                 } else {
                     // For directories, show the full path in white
-                    spans.push(Span::styled(full_path, Style::default().fg(Color::White)));
+                    spans.push(Span::styled(
+                        full_path,
+                        Style::default().fg(self.theme.popup.foreground),
+                    ));
                 }
             }
 
             if item.is_hidden {
                 spans.push(Span::styled(
                     " (hidden)",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default()
+                        .fg(self.theme.general.foreground)
+                        .add_modifier(Modifier::DIM),
                 ));
             }
 
             let style = if is_selected {
                 Style::default()
-                    .bg(Color::Blue)
-                    .fg(Color::White)
+                    .bg(self.theme.popup.highlight_bg)
+                    .fg(self.theme.popup.highlight_fg)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(self.theme.popup.foreground)
             };
 
             file_lines.push(Line::from(spans).style(style));
@@ -274,7 +289,7 @@ impl<'a> FuzzySearchWidget<'a> {
             let placeholder_line = Line::from(vec![Span::styled(
                 placeholder_text,
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(self.theme.syntax.keyword)
                     .add_modifier(Modifier::ITALIC),
             )]);
 
@@ -310,7 +325,11 @@ impl<'a> FuzzySearchWidget<'a> {
                 .style(Style::default().bg(self.theme.ui.status_bar_bg));
 
             let no_preview_text = Paragraph::new("No preview available")
-                .style(Style::default().fg(Color::Gray))
+                .style(
+                    Style::default()
+                        .fg(self.theme.general.foreground)
+                        .add_modifier(Modifier::DIM),
+                )
                 .block(no_preview_block);
 
             no_preview_text.render(area, buf);
