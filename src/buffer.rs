@@ -1,8 +1,11 @@
 use crate::syntax::{LanguageId, LanguageRegistry, SyntaxHighlighter, get_language_config};
 use crate::motion::Position;
+use lru::LruCache;
 use ropey::Rope;
 use std::fs;
 use std::path::Path;
+use std::num::NonZeroUsize;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub enum BufferError {
@@ -46,6 +49,12 @@ pub struct Buffer {
     pub modified: bool,
     pub version: usize,
     pub highlighter: Option<SyntaxHighlighter>,
+    // Performance optimization: LRU cache for line content to avoid repeated allocations
+    line_cache: LruCache<usize, String>,
+    // Performance optimization: debounce highlighter updates to avoid blocking on every keystroke
+    highlight_debounce: Duration,
+    last_highlight_time: Instant,
+    highlight_pending: bool,
 }
 
 impl Buffer {
@@ -56,6 +65,12 @@ impl Buffer {
             modified: false,
             version: 0,
             highlighter: None,
+            // Cache 256 lines (typical viewport + margin)
+            line_cache: LruCache::new(NonZeroUsize::new(256).unwrap()),
+            // Debounce highlighter updates by 50ms to avoid blocking typing
+            highlight_debounce: Duration::from_millis(50),
+            last_highlight_time: Instant::now(),
+            highlight_pending: false,
         }
     }
 }
@@ -72,8 +87,58 @@ impl Buffer {
         self.rope.insert_char(char_idx, char);
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        self.invalidate_line_cache(line);
+        self.schedule_highlight();
         Ok(())
+    }
+
+    /// Get line content with LRU caching to avoid repeated allocations
+    /// TODO: Integrate this into the rendering pipeline to reduce allocations
+    /// Currently unused, kept for future optimization
+    #[allow(dead_code)]
+    fn line_cached(&mut self, line_idx: usize) -> Option<String> {
+        // Check cache first
+        if let Some(cached) = self.line_cache.get(&line_idx) {
+            return Some(cached.clone());
+        }
+
+        // Cache miss - fetch and cache
+        if let Some(line) = self.line(line_idx) {
+            self.line_cache.put(line_idx, line.clone());
+            Some(line)
+        } else {
+            None
+        }
+    }
+
+    /// Invalidate cache for specific line (and nearby lines for safety)
+    fn invalidate_line_cache(&mut self, line_idx: usize) {
+        self.line_cache.pop(&line_idx);
+        // Also invalidate adjacent lines since edits can affect them
+        if line_idx > 0 {
+            self.line_cache.pop(&(line_idx - 1));
+        }
+        self.line_cache.pop(&(line_idx + 1));
+    }
+
+    /// Schedule highlighter update with debouncing
+    fn schedule_highlight(&mut self) {
+        if self.last_highlight_time.elapsed() >= self.highlight_debounce {
+            self.update_highlighter().ok();
+            self.last_highlight_time = Instant::now();
+            self.highlight_pending = false;
+        } else {
+            self.highlight_pending = true;
+        }
+    }
+
+    /// Check if there's a pending highlight update that should be processed
+    pub fn check_pending_highlight(&mut self) {
+        if self.highlight_pending && self.last_highlight_time.elapsed() >= self.highlight_debounce {
+            self.update_highlighter().ok();
+            self.last_highlight_time = Instant::now();
+            self.highlight_pending = false;
+        }
     }
 
     pub fn delete_char(&mut self, line: usize, col: usize) -> Result<(), BufferError> {
@@ -91,7 +156,8 @@ impl Buffer {
         }
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        self.invalidate_line_cache(line);
+        self.schedule_highlight();
         Ok(())
     }
 
@@ -100,7 +166,8 @@ impl Buffer {
         self.rope.insert(char_idx, text);
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        self.invalidate_line_cache(line);
+        self.schedule_highlight();
         Ok(())
     }
 
@@ -135,6 +202,9 @@ impl Buffer {
         self.file_path = Some(path.as_ref().to_string_lossy().to_string());
         self.modified = false;
         self.version = 0;
+
+        // Clear cache when loading new file
+        self.line_cache.clear();
 
         // Detect language and set highlighter
         if let Some(extension) = path.as_ref().extension() {
@@ -171,6 +241,74 @@ impl Buffer {
 
     pub fn save_to_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), BufferError> {
         fs::write(path.as_ref(), self.rope.to_string())?;
+        self.file_path = Some(path.as_ref().to_string_lossy().to_string());
+        self.modified = false;
+        Ok(())
+    }
+
+    /// Async version of load_from_file - runs file I/O on thread pool to avoid blocking UI
+    pub async fn load_from_file_async<P: AsRef<Path>>(&mut self, path: P) -> Result<(), BufferError> {
+        let path_buf = path.as_ref().to_path_buf();
+        let content = tokio::task::spawn_blocking(move || {
+            std::fs::read_to_string(&path_buf)
+                .map_err(BufferError::Io)
+        })
+        .await
+        .map_err(|e| BufferError::Io(std::io::Error::other(e)))??;
+
+        self.rope = Rope::from_str(&content);
+        self.file_path = Some(path.as_ref().to_string_lossy().to_string());
+        self.modified = false;
+        self.version = 0;
+
+        // Clear cache when loading new file
+        self.line_cache.clear();
+
+        // Detect language and set highlighter
+        if let Some(extension) = path.as_ref().extension() {
+            let lang_id = match extension.to_str() {
+                Some("rs") => Some(LanguageId::Rust),
+                Some("py") => Some(LanguageId::Python),
+                Some("js") => Some(LanguageId::JavaScript),
+                Some("ts") => Some(LanguageId::TypeScript),
+                _ => None,
+            };
+            if let Some(id) = lang_id {
+                let config = get_language_config(id);
+                self.highlighter = Some(SyntaxHighlighter::new(config).map_err(|_| {
+                    BufferError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Syntax error",
+                    ))
+                })?);
+                self.highlighter
+                    .as_mut()
+                    .unwrap()
+                    .parse(&content)
+                    .map_err(|_| {
+                        BufferError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Parse error",
+                        ))
+                    })?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Async version of save_to_file - runs file I/O on thread pool to avoid blocking UI
+    pub async fn save_to_file_async<P: AsRef<Path>>(&mut self, path: P) -> Result<(), BufferError> {
+        let path_buf = path.as_ref().to_path_buf();
+        let content = self.rope.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            std::fs::write(&path_buf, content)
+                .map_err(BufferError::Io)
+        })
+        .await
+        .map_err(|e| BufferError::Io(std::io::Error::other(e)))??;
+
         self.file_path = Some(path.as_ref().to_string_lossy().to_string());
         self.modified = false;
         Ok(())
@@ -275,7 +413,11 @@ impl Buffer {
         self.rope.remove(start_char..end_char);
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        // Invalidate cache for affected lines
+        for line in start.line..=end.line.min(self.line_count()) {
+            self.invalidate_line_cache(line);
+        }
+        self.schedule_highlight();
 
         Ok(deleted)
     }
@@ -293,7 +435,8 @@ impl Buffer {
         self.rope.remove(line_start..line_end);
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        self.invalidate_line_cache(line);
+        self.schedule_highlight();
 
         Ok(deleted)
     }
@@ -309,7 +452,11 @@ impl Buffer {
         self.rope.remove(start_char..end_char);
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        // Invalidate cache for affected lines
+        for line in start_line..end_line {
+            self.invalidate_line_cache(line);
+        }
+        self.schedule_highlight();
 
         Ok(deleted)
     }
@@ -360,7 +507,8 @@ impl Buffer {
 
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        self.invalidate_line_cache(line);
+        self.schedule_highlight();
 
         Ok(())
     }
@@ -379,7 +527,8 @@ impl Buffer {
         self.rope.remove(char_idx..end_idx);
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        self.invalidate_line_cache(line);
+        self.schedule_highlight();
 
         Ok(deleted)
     }
@@ -397,7 +546,8 @@ impl Buffer {
 
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        self.invalidate_line_cache(line);
+        self.schedule_highlight();
 
         Ok(())
     }
@@ -413,7 +563,11 @@ impl Buffer {
 
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        // Invalidate cache for affected lines
+        for line in start_line..=end_line.min(self.line_count().saturating_sub(1)) {
+            self.invalidate_line_cache(line);
+        }
+        self.schedule_highlight();
 
         Ok(())
     }
@@ -446,7 +600,11 @@ impl Buffer {
 
         self.modified = true;
         self.version += 1;
-        self.update_highlighter().ok();
+        // Invalidate cache for affected lines
+        for line in start_line..=end_line.min(self.line_count().saturating_sub(1)) {
+            self.invalidate_line_cache(line);
+        }
+        self.schedule_highlight();
 
         Ok(())
     }

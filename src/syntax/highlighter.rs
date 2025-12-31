@@ -1,6 +1,7 @@
 use crate::syntax::{LanguageConfig, QueryLoader};
 use log::{debug, trace};
 use std::collections::HashMap;
+use std::ops::Range;
 use tree_sitter::{Parser, Query, Tree};
 
 pub struct SyntaxHighlighter {
@@ -9,6 +10,9 @@ pub struct SyntaxHighlighter {
     language_config: LanguageConfig,
     highlights: HashMap<usize, Vec<HighlightToken>>, // line -> tokens
     query_loader: QueryLoader,
+    // Performance optimization: Track viewport to avoid re-highlighting unchanged regions
+    current_viewport: Option<Range<usize>>,
+    full_text: Option<String>, // Cache full text for viewport updates
 }
 
 #[derive(Debug, Clone)]
@@ -30,12 +34,15 @@ impl SyntaxHighlighter {
             language_config,
             highlights: HashMap::new(),
             query_loader: QueryLoader::new(),
+            current_viewport: None,
+            full_text: None,
         })
     }
 
     pub fn parse(&mut self, text: &str) -> Result<(), Box<dyn std::error::Error>> {
         self.tree = self.parser.parse(text, None);
-        self.update_highlights(text);
+        self.full_text = Some(text.to_string());
+        self.update_highlights(text, None);
         Ok(())
     }
 
@@ -49,13 +56,52 @@ impl SyntaxHighlighter {
             self.tree = self.parser.parse(text, Some(tree));
         } else {
             self.parse(text)?;
+            return Ok(());
         }
-        self.update_highlights(text);
+        self.full_text = Some(text.to_string());
+        self.update_highlights(text, None);
         Ok(())
     }
 
-    fn update_highlights(&mut self, text: &str) {
-        self.highlights.clear();
+    /// Update highlights for a specific viewport range (performance optimization)
+    pub fn update_highlights_viewport(&mut self, viewport: Range<usize>) {
+        if let Some(text) = &self.full_text {
+            // Check if viewport has changed significantly
+            let needs_update = match &self.current_viewport {
+                None => true,
+                Some(current) => {
+                    // Update if viewport moved by more than 10 lines
+                    let start_diff = viewport.start.abs_diff(current.start);
+                    let end_diff = viewport.end.abs_diff(current.end);
+                    start_diff > 10 || end_diff > 10
+                }
+            };
+
+            if needs_update {
+                // Clear old highlights that are no longer in viewport (keep some margin)
+                if let Some(current) = &self.current_viewport {
+                    let margin = 20;
+                    for line in current.start.saturating_sub(margin)..current.end + margin {
+                        if line < viewport.start.saturating_sub(margin) || line > viewport.end + margin {
+                            self.highlights.remove(&line);
+                        }
+                    }
+                }
+
+                // Clone text to avoid borrow checker issue
+                let text_clone = text.clone();
+                self.update_highlights(&text_clone, Some(viewport.clone()));
+                self.current_viewport = Some(viewport);
+            }
+        }
+    }
+
+    fn update_highlights(&mut self, text: &str, viewport: Option<Range<usize>>) {
+        // Only clear highlights if we're not doing viewport-specific updates
+        if viewport.is_none() {
+            self.highlights.clear();
+        }
+
         if let Some(tree) = &self.tree {
             let language = (self.language_config.tree_sitter_language)();
 
@@ -78,7 +124,7 @@ impl SyntaxHighlighter {
                 Some(self.language_config.highlight_query_fallback),
             ) {
                 debug!("Query loaded successfully");
-                Self::apply_query(&mut self.highlights, text, tree, query);
+                Self::apply_query(&mut self.highlights, text, tree, &query, viewport.as_ref());
             } else {
                 debug!("Failed to load query");
             }
@@ -91,7 +137,7 @@ impl SyntaxHighlighter {
                     self.language_config.injection_query_fallback,
                 )
             {
-                Self::apply_query(&mut self.highlights, text, tree, query);
+                Self::apply_query(&mut self.highlights, text, tree, &query, viewport.as_ref());
             }
 
             // Load and apply locals query
@@ -102,7 +148,7 @@ impl SyntaxHighlighter {
                     self.language_config.locals_query_fallback,
                 )
             {
-                Self::apply_query(&mut self.highlights, text, tree, query);
+                Self::apply_query(&mut self.highlights, text, tree, &query, viewport.as_ref());
             }
 
             // Sort tokens by start position
@@ -117,6 +163,7 @@ impl SyntaxHighlighter {
         text: &str,
         tree: &Tree,
         query: &Query,
+        viewport: Option<&Range<usize>>,
     ) {
         let mut cursor = tree_sitter::QueryCursor::new();
         let captures = cursor.captures(query, tree.root_node(), text.as_bytes());
@@ -129,6 +176,17 @@ impl SyntaxHighlighter {
                 let start = capture.node.start_byte();
                 let end = capture.node.end_byte();
                 let line = text[..start].chars().filter(|&c| c == '\n').count();
+
+                // Performance optimization: Skip lines outside viewport
+                if let Some(viewport) = viewport {
+                    // Add margin for multi-line tokens and lookahead
+                    let margin = 5;
+                    if line < viewport.start.saturating_sub(margin)
+                        || line > viewport.end + margin
+                    {
+                        continue;
+                    }
+                }
 
                 highlights.entry(line).or_default().push(HighlightToken {
                     start,

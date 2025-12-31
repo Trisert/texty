@@ -62,8 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Directory → start in fuzzy search mode
             editor.start_fuzzy_search_in_dir(path);
         } else {
-            // File → open normally
-            if let Err(e) = editor.open_file(&path.to_string_lossy()) {
+            // File → open normally (using async version to avoid blocking)
+            if let Err(e) = editor.open_file_async(&path.to_string_lossy()).await {
                 eprintln!("Error opening file '{}': {}", path.display(), e);
                 // Continue with empty buffer if file can't be opened
             }
@@ -87,14 +87,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(false);
     let mut renderer = TuiRenderer::new(use_terminal_palette, &cli_args.theme)?;
 
-    // Basic event loop
-    loop {
-        // Render
-        renderer.draw(&mut editor)?;
+    // Frame rate limiting constants
+    const TARGET_FPS: u64 = 60;
+    const FRAME_DURATION: Duration = Duration::from_micros(1_000_000 / TARGET_FPS);
 
-        // Read event
-        match read()? {
-            Event::Key(key_event) => {
+    // Event loop with frame rate limiting
+    let mut last_frame_time = Instant::now();
+    let mut needs_redraw = true;
+
+    loop {
+        // Only render if needed and enough time has elapsed since last frame
+        if needs_redraw && last_frame_time.elapsed() >= FRAME_DURATION {
+            renderer.draw(&mut editor)?;
+            last_frame_time = Instant::now();
+            needs_redraw = false;
+        }
+
+        // Read event (blocking, with timeout for periodic redraws)
+        let event = if last_frame_time.elapsed() < FRAME_DURATION {
+            // Use poll with timeout to respect frame rate
+            let timeout = FRAME_DURATION.saturating_sub(last_frame_time.elapsed());
+            if crossterm::event::poll(timeout)? {
+                Some(read()?)
+            } else {
+                None
+            }
+        } else {
+            Some(read()?)
+        };
+
+        match event {
+            Some(Event::Key(key_event)) => {
                 match &editor.mode {
                     Mode::Command => {
                         // Handle command line input
@@ -108,40 +131,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if should_quit {
                             break;
                         }
+                        needs_redraw = true;
                     }
                     Mode::Normal | Mode::Visual => {
-                        // Use Vim parser for multi-key command sequences
-                        match editor.vim_parser.process_key(key_event) {
-                            ParseResult::Command(cmd) => {
-                                if editor.execute_command(cmd) {
-                                    break; // Quit
+                        // Special handling for double-space to open fuzzy search
+                        if key_event.code == KeyCode::Char(' ') {
+                            let now = Instant::now();
+                            let is_double_space = unsafe {
+                                if let Some(last_time) = LAST_SPACE_TIME {
+                                    now.duration_since(last_time) < Duration::from_millis(500)
+                                } else {
+                                    false
                                 }
+                            };
+
+                            unsafe {
+                                LAST_SPACE_TIME = Some(now);
                             }
-                            ParseResult::Pending => {
-                                // Continue waiting for more keys (multi-key sequence)
+
+                            if is_double_space {
+                                if editor.execute_command(Command::OpenFuzzySearch) {
+                                    break;
+                                }
+                                needs_redraw = true;
                             }
-                            ParseResult::Invalid => {
-                                // Invalid sequence, reset parser
-                                editor.vim_parser.reset();
-                                editor.status_message = Some("Invalid command".to_string());
+                        } else {
+                            // Use Vim parser for multi-key command sequences
+                            match editor.vim_parser.process_key(key_event) {
+                                ParseResult::Command(cmd) => {
+                                    if editor.execute_command(cmd) {
+                                        break; // Quit
+                                    }
+                                    needs_redraw = true;
+                                }
+                                ParseResult::Pending => {
+                                    // Continue waiting for more keys (multi-key sequence)
+                                    needs_redraw = true;
+                                }
+                                ParseResult::Invalid => {
+                                    // Invalid sequence, reset parser
+                                    editor.vim_parser.reset();
+                                    editor.status_message = Some("Invalid command".to_string());
+                                    needs_redraw = true;
+                                }
                             }
                         }
                     }
                     _ => {
                         // Handle other modes with simple key_to_command
                         let command = key_to_command(key_event, &editor.mode);
-                        if let Some(cmd) = command
-                            && editor.execute_command(cmd)
-                        {
-                            break; // Quit
+                        if let Some(cmd) = command {
+                            if editor.execute_command(cmd) {
+                                break; // Quit
+                            }
+                            needs_redraw = true;
                         }
                     }
                 }
             }
-            Event::Resize(rows, cols) => {
+            Some(Event::Resize(rows, cols)) => {
                 editor.handle_resize(rows, cols);
+                needs_redraw = true;
             }
-            _ => {}
+            None => {
+                // Timeout - no event, continue loop
+            }
+            Some(_) => {}
         }
     }
 

@@ -78,6 +78,27 @@ impl VimParser {
     pub fn process_key(&mut self, key: KeyEvent) -> ParseResult {
         use crossterm::event::{KeyCode, KeyModifiers};
 
+        // Handle arrow keys directly
+        match key.code {
+            KeyCode::Left => {
+                self.reset();
+                return ParseResult::Command(Command::MoveLeft);
+            }
+            KeyCode::Down => {
+                self.reset();
+                return ParseResult::Command(Command::MoveDown);
+            }
+            KeyCode::Up => {
+                self.reset();
+                return ParseResult::Command(Command::MoveUp);
+            }
+            KeyCode::Right => {
+                self.reset();
+                return ParseResult::Command(Command::MoveRight);
+            }
+            _ => {}
+        }
+
         // Extract character from key event
         let ch = match key.code {
             KeyCode::Char(c) => Some(c),
@@ -169,6 +190,26 @@ impl VimParser {
             }
 
             // Motion commands
+            'h' => {
+                let _count = self.count.unwrap_or(1);
+                self.reset();
+                ParseResult::Command(Command::MoveLeft)
+            }
+            'j' => {
+                let _count = self.count.unwrap_or(1);
+                self.reset();
+                ParseResult::Command(Command::MoveDown)
+            }
+            'k' => {
+                let _count = self.count.unwrap_or(1);
+                self.reset();
+                ParseResult::Command(Command::MoveUp)
+            }
+            'l' => {
+                let _count = self.count.unwrap_or(1);
+                self.reset();
+                ParseResult::Command(Command::MoveRight)
+            }
             'w' => {
                 let count = self.count.unwrap_or(1);
                 self.reset();

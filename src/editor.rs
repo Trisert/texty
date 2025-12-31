@@ -383,9 +383,17 @@ impl Editor {
             }
             Command::SaveFile => {
                 let path = self.buffer.file_path.as_ref().cloned();
-                if let Some(path) = path
-                    && self.buffer.save_to_file(&path).is_ok()
-                {
+                if let Some(path) = path {
+                    // Spawn async save in background to avoid blocking UI
+                    let path_clone = path.clone();
+                    let content = self.buffer.rope.to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = tokio::fs::write(&path_clone, &content).await {
+                            eprintln!("Error saving file '{}': {}", path_clone, e);
+                        }
+                    });
+                    self.buffer.modified = false;
+
                     // TODO: Notify LSP server about file save
                     // Async LSP operations need proper integration with sync UI
                 }
@@ -862,6 +870,52 @@ impl Editor {
         Ok(())
     }
 
+    /// Async version of open_file - uses async file loading to avoid blocking UI
+    pub async fn open_file_async(&mut self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.buffer.load_from_file_async(path).await?;
+        self.buffer.file_path = Some(path.to_string());
+
+        // Reset viewport and cursor to ensure clean rendering state
+        self.viewport.offset_line = 0;
+        self.viewport.offset_col = 0;
+        self.cursor.line = 0;
+        self.cursor.col = 0;
+
+        // Update language based on file extension
+        let language_config = crate::syntax::language::get_language_config_by_extension(
+            std::path::Path::new(path)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or(""),
+        );
+
+        if let Some(config) = language_config {
+            self.current_language = Some(config.id);
+
+            // Initialize syntax highlighter for this language
+            match crate::syntax::highlighter::SyntaxHighlighter::new(config) {
+                Ok(highlighter) => {
+                    self.buffer.highlighter = Some(highlighter);
+                    // Parse the loaded content
+                    let _ = self.buffer.update_highlighter();
+                }
+                Err(_) => {
+                    // Syntax highlighting failed to initialize, continue without it
+                    self.buffer.highlighter = None;
+                }
+            }
+        } else {
+            self.current_language = None;
+            self.buffer.highlighter = None;
+        }
+
+        // TODO: Notify LSP server about file open
+        // This is currently blocked by the async/sync boundary
+        // Async LSP operations need proper integration with sync UI
+
+        Ok(())
+    }
+
     pub fn notify_text_change(&mut self) {
         // Adjust viewport if it's out of bounds after buffer changes
         let max_line = self.buffer.line_count().saturating_sub(1);
@@ -997,19 +1051,39 @@ impl Editor {
             "x" | "wq" => {
                 // Save and quit
                 if let Some(path) = self.buffer.file_path.clone() {
-                    self.buffer.save_to_file(&path)?;
+                    let path_clone = path.clone();
+                    let content = self.buffer.rope.to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = tokio::fs::write(&path_clone, &content).await {
+                            eprintln!("Error saving file '{}': {}", path_clone, e);
+                        }
+                    });
+                    self.buffer.modified = false;
                 }
                 Ok(true)
             }
             "w" | "write" => {
                 // Save file
                 if let Some(path) = self.buffer.file_path.clone() {
-                    self.buffer.save_to_file(&path)?;
+                    let path_clone = path.clone();
+                    let content = self.buffer.rope.to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = tokio::fs::write(&path_clone, &content).await {
+                            eprintln!("Error saving file '{}': {}", path_clone, e);
+                        }
+                    });
+                    self.buffer.modified = false;
                 } else if parts.len() > 1 {
                     // Save as new file
                     let filename = parts[1].to_string();
                     self.buffer.file_path = Some(filename.clone());
-                    self.buffer.save_to_file(&filename)?;
+                    let content = self.buffer.rope.to_string();
+                    tokio::spawn(async move {
+                        if let Err(e) = tokio::fs::write(&filename, &content).await {
+                            eprintln!("Error saving file '{}': {}", filename, e);
+                        }
+                    });
+                    self.buffer.modified = false;
                 }
                 Ok(false)
             }

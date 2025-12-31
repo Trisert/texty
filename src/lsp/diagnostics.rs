@@ -3,13 +3,17 @@
 use crossterm::style::Color;
 use lsp_types::{Diagnostic, DiagnosticSeverity, Url};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
 
+/// Manages LSP diagnostics with thread-safe async access
+///
+/// This manager stores diagnostics per file URI and provides methods
+/// to add, retrieve, and clear diagnostic information. All operations
+/// are async to work seamlessly with the LSP async runtime.
 #[derive(Debug, Clone)]
 pub struct DiagnosticManager {
     diagnostics: Arc<AsyncMutex<HashMap<Url, Vec<Diagnostic>>>>,
-    sync_cache: Arc<Mutex<HashMap<Url, Vec<Diagnostic>>>>, // For synchronous UI access
 }
 
 impl Default for DiagnosticManager {
@@ -19,61 +23,48 @@ impl Default for DiagnosticManager {
 }
 
 impl DiagnosticManager {
-    pub async fn add_diagnostics(&self, uri: Url, diagnostics: Vec<lsp_types::Diagnostic>) {
-        let mut diags = self.diagnostics.lock().await;
-        diags.insert(uri.clone(), diagnostics.clone());
-
-        // Update sync cache for UI access
-        let mut cache = self.sync_cache.lock().unwrap();
-        cache.insert(uri, diagnostics);
+    pub fn new() -> Self {
+        Self {
+            diagnostics: Arc::new(AsyncMutex::new(HashMap::new())),
+        }
     }
 
+    /// Add diagnostics for a specific file URI
+    pub async fn add_diagnostics(&self, uri: Url, diagnostics: Vec<lsp_types::Diagnostic>) {
+        let mut diags = self.diagnostics.lock().await;
+        diags.insert(uri, diagnostics);
+    }
+
+    /// Get all diagnostics for a specific file URI
     pub async fn get_diagnostics(&self, uri: &Url) -> Vec<Diagnostic> {
         let diags = self.diagnostics.lock().await;
         diags.get(uri).cloned().unwrap_or_default()
     }
 
+    /// Clear diagnostics for a specific file URI
     pub async fn clear_diagnostics(&self, uri: &Url) {
         let mut diags = self.diagnostics.lock().await;
         diags.remove(uri);
-
-        // Also clear from sync cache
-        let mut cache = self.sync_cache.lock().unwrap();
-        cache.remove(uri);
     }
 
+    /// Clear all diagnostics
     pub async fn clear_all_diagnostics(&self) {
         let mut diags = self.diagnostics.lock().await;
         diags.clear();
-
-        // Also clear sync cache
-        let mut cache = self.sync_cache.lock().unwrap();
-        cache.clear();
     }
 
+    /// Get all diagnostics across all files
     pub async fn get_all_diagnostics(&self) -> Vec<(Url, Vec<Diagnostic>)> {
         let diags = self.diagnostics.lock().await;
         diags.clone().into_iter().collect()
     }
-}
 
-impl DiagnosticManager {
-    pub fn new() -> Self {
-        Self {
-            diagnostics: Arc::new(AsyncMutex::new(HashMap::new())),
-            sync_cache: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
+    /// Update diagnostics for a file (alias for add_diagnostics)
     pub async fn update_diagnostics(&self, uri: Url, diagnostics: Vec<Diagnostic>) {
-        let mut diags = self.diagnostics.lock().await;
-        diags.insert(uri.clone(), diagnostics.clone());
-
-        // Update sync cache
-        let mut cache = self.sync_cache.lock().unwrap();
-        cache.insert(uri, diagnostics);
+        self.add_diagnostics(uri, diagnostics).await;
     }
 
+    /// Get diagnostics for a specific line in a file
     pub async fn get_diagnostics_at_line(&self, uri: &Url, line: u32) -> Vec<Diagnostic> {
         let diags = self.diagnostics.lock().await;
         if let Some(file_diags) = diags.get(uri) {
@@ -87,20 +78,7 @@ impl DiagnosticManager {
         }
     }
 
-    // Synchronous version for UI rendering - uses sync cache
-    pub fn get_diagnostics_at_line_sync(&self, uri: &Url, line: u32) -> Vec<Diagnostic> {
-        let cache = self.sync_cache.lock().unwrap();
-        if let Some(file_diags) = cache.get(uri) {
-            file_diags
-                .iter()
-                .filter(|d| d.range.start.line == line)
-                .cloned()
-                .collect()
-        } else {
-            vec![]
-        }
-    }
-
+    /// Convert diagnostic severity to a terminal color
     pub fn diagnostic_to_color(severity: DiagnosticSeverity) -> Color {
         match severity {
             DiagnosticSeverity::ERROR => Color::Red,
@@ -267,10 +245,10 @@ mod tests {
     }
 
     #[test]
-    fn test_diagnostic_sync_cache() {
+    fn test_diagnostic_async_line_access() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let manager = DiagnosticManager::new();
-        let uri = Url::parse("file:///sync_test.rs").unwrap();
+        let uri = Url::parse("file:///async_test.rs").unwrap();
 
         let diagnostic = Diagnostic {
             range: Range {
@@ -284,21 +262,21 @@ mod tests {
                 },
             },
             severity: Some(DiagnosticSeverity::WARNING),
-            message: "Sync warning".to_string(),
+            message: "Async warning".to_string(),
             ..Default::default()
         };
 
-        // Add diagnostics (this should update sync cache)
+        // Add diagnostics
         rt.block_on(manager.add_diagnostics(uri.clone(), vec![diagnostic.clone()]));
 
-        // Test sync cache access
-        let sync_diags = manager.get_diagnostics_at_line_sync(&uri, 1);
-        assert_eq!(sync_diags.len(), 1);
-        assert_eq!(sync_diags[0].message, "Sync warning");
-        assert_eq!(sync_diags[0].severity, Some(DiagnosticSeverity::WARNING));
+        // Test async line access
+        let line_diags = rt.block_on(manager.get_diagnostics_at_line(&uri, 1));
+        assert_eq!(line_diags.len(), 1);
+        assert_eq!(line_diags[0].message, "Async warning");
+        assert_eq!(line_diags[0].severity, Some(DiagnosticSeverity::WARNING));
 
         // Test line filtering
-        let no_diags = manager.get_diagnostics_at_line_sync(&uri, 0);
+        let no_diags = rt.block_on(manager.get_diagnostics_at_line(&uri, 0));
         assert_eq!(no_diags.len(), 0);
     }
 
@@ -378,13 +356,13 @@ mod tests {
 
         rt.block_on(manager.add_diagnostics(uri.clone(), diagnostics));
 
-        // Test line 0 diagnostics
-        let line_0_diags = manager.get_diagnostics_at_line_sync(&uri, 0);
+        // Test line 0 diagnostics (using async method)
+        let line_0_diags = rt.block_on(manager.get_diagnostics_at_line(&uri, 0));
         assert_eq!(line_0_diags.len(), 1);
         assert_eq!(line_0_diags[0].message, "Line 0 error");
 
-        // Test line 1 diagnostics
-        let line_1_diags = manager.get_diagnostics_at_line_sync(&uri, 1);
+        // Test line 1 diagnostics (using async method)
+        let line_1_diags = rt.block_on(manager.get_diagnostics_at_line(&uri, 1));
         assert_eq!(line_1_diags.len(), 2);
         assert!(line_1_diags.iter().any(|d| d.message == "Line 1 warning"));
         assert!(line_1_diags.iter().any(|d| d.message == "Line 1 info"));

@@ -1,18 +1,19 @@
 use log::{debug, trace};
-use std::collections::HashMap;
 use std::fs;
 use tree_sitter::Query;
 
-/// Loads and caches tree-sitter queries from runtime files
+use super::cache::QuerySourceCache;
+
+/// Loads and caches tree-sitter queries from runtime files using LRU cache
 #[derive(Debug)]
 pub struct QueryLoader {
-    cache: HashMap<String, Query>,
+    cache: QuerySourceCache,
 }
 
 impl QueryLoader {
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: QuerySourceCache::new(100), // Cache up to 100 query sources
         }
     }
 
@@ -22,11 +23,13 @@ impl QueryLoader {
         language: tree_sitter::Language,
         path: &str,
         fallback_query: Option<&str>,
-    ) -> Result<&Query, Box<dyn std::error::Error>> {
+    ) -> Result<Query, Box<dyn std::error::Error>> {
         let cache_key = format!("{:?}_{}", language, path);
 
-        if !self.cache.contains_key(&cache_key) {
-            let query_source = match fs::read_to_string(path) {
+        // Try to get from cache first
+        let query_source = self.cache.get_or_load_source(&cache_key, || {
+            // Load the query source from file or use fallback
+            let source = match fs::read_to_string(path) {
                 Ok(content) => {
                     debug!("Loaded query from file: {}", path);
                     content
@@ -45,23 +48,25 @@ impl QueryLoader {
                 }
             };
 
-            trace!("Query source length: {}", query_source.len());
+            trace!("Query source length: {}", source.len());
             trace!(
                 "First 200 chars: {}",
-                &query_source[..200.min(query_source.len())]
+                &source[..200.min(source.len())]
             );
 
-            let query = match Query::new(language, &query_source) {
-                Ok(q) => q,
-                Err(e) => {
-                    debug!("Query::new failed: {:?}", e);
-                    return Err(Box::new(e) as Box<dyn std::error::Error>);
-                }
-            };
-            self.cache.insert(cache_key.clone(), query);
-        }
+            Ok(source)
+        })?;
 
-        Ok(self.cache.get(&cache_key).unwrap())
+        // Compile the query from the source
+        let query = match Query::new(language, &query_source) {
+            Ok(q) => q,
+            Err(e) => {
+                debug!("Query::new failed: {:?}", e);
+                return Err(Box::new(e) as Box<dyn std::error::Error>);
+            }
+        };
+
+        Ok(query)
     }
 
     /// Clear the query cache (useful for memory management or reloading)

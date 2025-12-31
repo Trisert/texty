@@ -584,6 +584,16 @@ fn important_name_bonus(filename: &str) -> i32 {
     0
 }
 
+/// Calculate total file bonus combining type, directory, recency, and name importance
+fn calculate_file_bonus(path: &Path, filename: &str, modified: &SystemTime) -> i32 {
+    let file_type = classify_file_type(path, filename);
+    let type_bonus = file_type.bonus_score();
+    let dir_bonus = calculate_directory_bonus(path, filename);
+    let recency = recency_bonus(modified);
+    let name_importance = important_name_bonus(filename);
+    type_bonus + dir_bonus + recency + name_importance
+}
+
 /// Calculate bonus based on directory structure and location
 fn calculate_directory_bonus(path: &Path, filename: &str) -> i32 {
     let path_str = path.to_string_lossy();
@@ -763,13 +773,39 @@ impl FuzzySearchState {
 
     /// Optimized update filter with early termination
     fn update_filter_early_termination(&mut self) {
-        // For short queries on large datasets, only scan until we have enough good matches
-        let target_results = 50; // Find first 50 good matches
+        // Apply early termination filter
+        let scored_items = self.apply_early_termination_filter(&self.query);
+
+        // Sort the results
+        let sorted_items = self.score_and_sort_results(scored_items, &self.query);
+
+        // Update state with early termination results
+        self.result_count = sorted_items.len();
+        self.displayed_count = sorted_items.len();
+
+        self.filtered_items = sorted_items
+            .iter()
+            .map(|(item, _, _)| item.clone())
+            .collect();
+
+        // Cache partial results
+        self.update_result_cache(&sorted_items);
+
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+    }
+
+    /// Load more results for pagination (no-op since all results shown)
+    pub fn load_more_results(&mut self) {}
+
+    /// Apply early termination filter for short queries on large datasets
+    fn apply_early_termination_filter(&self, query: &str) -> Vec<(FileItem, i32, MatchType)> {
+        let target_results = 50;
         let mut scored_items: Vec<(FileItem, i32, MatchType)> = Vec::new();
 
         for item in &self.all_items {
             let result = if self.recursive_search {
-                fuzzy_match_with_priority_optimized(&self.query, item)
+                fuzzy_match_with_priority_optimized(query, item)
             } else {
                 let filename = if let Some(last_sep) = item.name.rfind(['/', '\\']) {
                     &item.name[last_sep + 1..]
@@ -777,28 +813,37 @@ impl FuzzySearchState {
                     &item.name
                 };
 
-                fuzzy_match_optimized(&self.query, filename)
-                    .map(|score| (score, MatchType::FilenameFuzzy))
+                let total_bonus = calculate_file_bonus(&item.path, filename, &item.modified);
+                fuzzy_match_optimized(query, filename)
+                    .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
             };
 
             if let Some((score, match_type)) = result {
                 scored_items.push((item.clone(), score, match_type));
 
                 // Early termination: stop if we have enough high-quality matches
-                if scored_items.len() >= target_results {
-                    // Check if remaining items are unlikely to beat current matches
-                    if let Some(min_score) = scored_items.iter().map(|(_, score, _)| *score).min() {
-                        // Only continue if this is a high-quality match
-                        if score > min_score * 2 {
+                if scored_items.len() >= target_results
+                    && let Some(min_score) = scored_items.iter().map(|(_, score, _)| *score).min()
+                        && score > min_score * 2 {
                             break;
                         }
-                    }
-                }
             }
         }
 
-        // Sort the results we found
+        scored_items
+    }
+
+    /// Score and sort filtered results
+    fn score_and_sort_results(
+        &self,
+        entries: Vec<(FileItem, i32, MatchType)>,
+        _query: &str,
+    ) -> Vec<(FileItem, i32, MatchType)> {
+        let mut scored_items = entries;
+
+        // Sort by priority, then by score (descending), then by name
         scored_items.sort_by(|a, b| {
+            // First sort by match type priority (ExactFilename > FilenameFuzzy > PathFuzzy)
             let type_order = match (&a.2, &b.2) {
                 (MatchType::ExactFilename, MatchType::ExactFilename) => std::cmp::Ordering::Equal,
                 (MatchType::ExactFilename, _) => std::cmp::Ordering::Less,
@@ -810,37 +855,89 @@ impl FuzzySearchState {
             };
 
             match type_order {
-                std::cmp::Ordering::Equal => match b.1.cmp(&a.1) {
-                    std::cmp::Ordering::Equal => a.0.name.cmp(&b.0.name),
-                    other => other,
-                },
+                std::cmp::Ordering::Equal => {
+                    // Same type: sort by score descending, then by name
+                    match b.1.cmp(&a.1) {
+                        std::cmp::Ordering::Equal => a.0.name.cmp(&b.0.name),
+                        other => other,
+                    }
+                }
                 other => other,
             }
         });
 
-        // Update state with early termination results
-        self.result_count = scored_items.len();
-        self.displayed_count = scored_items.len();
-
-        self.filtered_items = scored_items
-            .iter()
-            .map(|(item, _, _)| item.clone())
-            .collect();
-
-        // Cache partial results
-        let all_sorted_items: Vec<FileItem> = scored_items
-            .iter()
-            .map(|(item, _, _)| item.clone())
-            .collect();
-        self.result_cache
-            .insert(self.query.clone(), all_sorted_items);
-
-        self.selected_index = 0;
-        self.scroll_offset = 0;
+        scored_items
     }
 
-    /// Load more results for pagination (no-op since all results shown)
-    pub fn load_more_results(&mut self) {}
+    /// Update the result cache with scored items
+    fn update_result_cache(&mut self, scored_items: &[(FileItem, i32, MatchType)]) {
+        let all_sorted_items: Vec<FileItem> =
+            scored_items.iter().map(|(item, _, _)| item.clone()).collect();
+        self.result_cache.insert(self.query.clone(), all_sorted_items);
+    }
+
+    /// Filter items for non-empty query with optimized fzf-style scoring
+    fn filter_items_with_query(&self) -> Vec<(FileItem, i32, MatchType)> {
+        self.all_items
+            .par_iter()
+            .filter_map(|item| {
+                let result = if self.recursive_search {
+                    fuzzy_match_with_priority_optimized(&self.query, item)
+                } else {
+                    let filename = if let Some(last_sep) = item.name.rfind(['/', '\\']) {
+                        &item.name[last_sep + 1..]
+                    } else {
+                        &item.name
+                    };
+
+                    let total_bonus = calculate_file_bonus(&item.path, filename, &item.modified);
+                    fuzzy_match_optimized(&self.query, filename)
+                        .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
+                };
+
+                result.map(|(score, match_type)| (item.clone(), score, match_type))
+            })
+            .collect()
+    }
+
+    /// Filter all items for caching (uses non-optimized version for consistency)
+    fn filter_all_items_for_cache(&self) -> Vec<FileItem> {
+        self.all_items
+            .iter()
+            .filter_map(|item| {
+                let result = if self.recursive_search {
+                    fuzzy_match_with_priority(&self.query, item)
+                } else {
+                    let total_bonus = calculate_file_bonus(&item.path, &item.name, &item.modified);
+                    fuzzy_match(&self.query, &item.name)
+                        .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
+                };
+
+                result.map(|_| item.clone())
+            })
+            .collect()
+    }
+
+    /// Score all items for caching
+    fn score_all_items_for_cache(
+        &self,
+        all_filtered_items: &[FileItem],
+    ) -> Vec<(FileItem, i32, MatchType)> {
+        all_filtered_items
+            .iter()
+            .filter_map(|item| {
+                let result = if self.recursive_search {
+                    fuzzy_match_with_priority(&self.query, item)
+                } else {
+                    let total_bonus = calculate_file_bonus(&item.path, &item.name, &item.modified);
+                    fuzzy_match(&self.query, &item.name)
+                        .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
+                };
+
+                result.map(|(score, match_type)| (item.clone(), score, match_type))
+            })
+            .collect()
+    }
 
     pub fn update_filter(&mut self) {
         self.query = self.query.trim().to_string();
@@ -854,151 +951,24 @@ impl FuzzySearchState {
             self.displayed_count = self.filtered_items.len();
             self.has_more_results = false;
         } else {
-            // Single-pass filtering with optimized fzf-style scoring
-            let mut scored_items: Vec<(FileItem, i32, MatchType)> = self
-                .all_items
-                .par_iter() // Parallel processing with Rayon
-                .filter_map(|item| {
-                    let result = if self.recursive_search {
-                        fuzzy_match_with_priority_optimized(&self.query, item)
-                    } else {
-                        // For non-recursive, only match filename
-                        let filename = if let Some(last_sep) = item.name.rfind(['/', '\\']) {
-                            &item.name[last_sep + 1..]
-                        } else {
-                            &item.name
-                        };
+            // Filter and score items
+            let scored_items = self.filter_items_with_query();
 
-                        {
-                            let file_type = classify_file_type(&item.path, filename);
-                            let type_bonus = file_type.bonus_score();
-                            let dir_bonus = calculate_directory_bonus(&item.path, filename);
-                            let recency = recency_bonus(&item.modified);
-                            let name_importance = important_name_bonus(filename);
-                            let total_bonus = type_bonus + dir_bonus + recency + name_importance;
+            // Sort by priority and score
+            let sorted_items = self.score_and_sort_results(scored_items, &self.query);
 
-                            fuzzy_match_optimized(&self.query, filename)
-                                .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
-                        }
-                    };
-
-                    result.map(|(score, match_type)| (item.clone(), score, match_type))
-                })
-                .collect();
-
-            // Sort by priority, then by score (descending), then by name
-            scored_items.sort_by(|a, b| {
-                // First sort by match type priority (ExactFilename > FilenameFuzzy > PathFuzzy)
-                let type_order = match (&a.2, &b.2) {
-                    (MatchType::ExactFilename, MatchType::ExactFilename) => {
-                        std::cmp::Ordering::Equal
-                    }
-                    (MatchType::ExactFilename, _) => std::cmp::Ordering::Less,
-                    (_, MatchType::ExactFilename) => std::cmp::Ordering::Greater,
-                    (MatchType::FilenameFuzzy, MatchType::FilenameFuzzy) => {
-                        std::cmp::Ordering::Equal
-                    }
-                    (MatchType::FilenameFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Less,
-                    (MatchType::PathFuzzy, MatchType::FilenameFuzzy) => std::cmp::Ordering::Greater,
-                    (MatchType::PathFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Equal,
-                };
-
-                match type_order {
-                    std::cmp::Ordering::Equal => {
-                        // Same type: sort by score descending, then by name
-                        match b.1.cmp(&a.1) {
-                            std::cmp::Ordering::Equal => a.0.name.cmp(&b.0.name),
-                            other => other,
-                        }
-                    }
-                    other => other,
-                }
-            });
-
-            // Extract just the items
-            self.filtered_items = scored_items.into_iter().map(|(item, _, _)| item).collect();
+            // Extract just the items for display
+            self.filtered_items = sorted_items.into_iter().map(|(item, _, _)| item).collect();
             self.result_count = self.filtered_items.len();
             self.displayed_count = self.filtered_items.len();
             self.has_more_results = false;
             self.filtered_items.truncate(self.displayed_count);
-        }
 
-        // Cache the full results for pagination
-        if !self.query.is_empty() {
-            let all_filtered_items: Vec<FileItem> = self
-                .all_items
-                .iter()
-                .filter_map(|item| {
-                    let result = if self.recursive_search {
-                        fuzzy_match_with_priority(&self.query, item)
-                    } else {
-                        let file_type = classify_file_type(&item.path, &item.name);
-                        let type_bonus = file_type.bonus_score();
-                        let dir_bonus = calculate_directory_bonus(&item.path, &item.name);
-                        let recency = recency_bonus(&item.modified);
-                        let name_importance = important_name_bonus(&item.name);
-                        let total_bonus = type_bonus + dir_bonus + recency + name_importance;
-
-                        fuzzy_match(&self.query, &item.name)
-                            .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
-                    };
-
-                    result.map(|_| item.clone())
-                })
-                .collect();
-
-            let mut all_scored_items: Vec<(FileItem, i32, MatchType)> = all_filtered_items
-                .iter()
-                .filter_map(|item| {
-                    let result = if self.recursive_search {
-                        fuzzy_match_with_priority(&self.query, item)
-                    } else {
-                        let file_type = classify_file_type(&item.path, &item.name);
-                        let type_bonus = file_type.bonus_score();
-                        let dir_bonus = calculate_directory_bonus(&item.path, &item.name);
-                        let recency = recency_bonus(&item.modified);
-                        let name_importance = important_name_bonus(&item.name);
-                        let total_bonus = type_bonus + dir_bonus + recency + name_importance;
-
-                        fuzzy_match(&self.query, &item.name)
-                            .map(|score| (score + total_bonus, MatchType::FilenameFuzzy))
-                    };
-
-                    result.map(|(score, match_type)| (item.clone(), score, match_type))
-                })
-                .collect();
-
-            // Sort all results the same way
-            all_scored_items.sort_by(|a, b| {
-                let type_order = match (&a.2, &b.2) {
-                    (MatchType::ExactFilename, MatchType::ExactFilename) => {
-                        std::cmp::Ordering::Equal
-                    }
-                    (MatchType::ExactFilename, _) => std::cmp::Ordering::Less,
-                    (_, MatchType::ExactFilename) => std::cmp::Ordering::Greater,
-                    (MatchType::FilenameFuzzy, MatchType::FilenameFuzzy) => {
-                        std::cmp::Ordering::Equal
-                    }
-                    (MatchType::FilenameFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Less,
-                    (MatchType::PathFuzzy, MatchType::FilenameFuzzy) => std::cmp::Ordering::Greater,
-                    (MatchType::PathFuzzy, MatchType::PathFuzzy) => std::cmp::Ordering::Equal,
-                };
-
-                match type_order {
-                    std::cmp::Ordering::Equal => match b.1.cmp(&a.1) {
-                        std::cmp::Ordering::Equal => a.0.name.cmp(&b.0.name),
-                        other => other,
-                    },
-                    other => other,
-                }
-            });
-
-            let all_sorted_items: Vec<FileItem> = all_scored_items
-                .into_iter()
-                .map(|(item, _, _)| item)
-                .collect();
-            self.result_cache
-                .insert(self.query.clone(), all_sorted_items);
+            // Cache the full results for pagination
+            let all_filtered_items = self.filter_all_items_for_cache();
+            let mut all_scored_items = self.score_all_items_for_cache(&all_filtered_items);
+            all_scored_items = self.score_and_sort_results(all_scored_items, &self.query);
+            self.update_result_cache(&all_scored_items);
         }
     }
 
@@ -1346,13 +1316,8 @@ fn fuzzy_match_with_priority_optimized(query: &str, item: &FileItem) -> Option<(
         &full_path
     };
 
-    // Classify file type and calculate directory bonus
-    let file_type = classify_file_type(&item.path, filename);
-    let type_bonus = file_type.bonus_score();
-    let dir_bonus = calculate_directory_bonus(&item.path, filename);
-    let recency = recency_bonus(&item.modified);
-    let name_importance = important_name_bonus(filename);
-    let total_bonus = type_bonus + dir_bonus + recency + name_importance;
+    // Calculate all bonuses using the extracted helper
+    let total_bonus = calculate_file_bonus(&item.path, filename, &item.modified);
 
     // Priority 1: Exact filename match (always highest priority)
     if filename == query {
@@ -1395,13 +1360,8 @@ pub fn fuzzy_match_with_priority(query: &str, item: &FileItem) -> Option<(i32, M
         &full_path
     };
 
-    // Classify file type and calculate directory bonus
-    let file_type = classify_file_type(&item.path, filename);
-    let type_bonus = file_type.bonus_score();
-    let dir_bonus = calculate_directory_bonus(&item.path, filename);
-    let recency = recency_bonus(&item.modified);
-    let name_importance = important_name_bonus(filename);
-    let total_bonus = type_bonus + dir_bonus + recency + name_importance;
+    // Calculate all bonuses using the extracted helper
+    let total_bonus = calculate_file_bonus(&item.path, filename, &item.modified);
 
     // Priority 1: Exact filename match (always highest priority)
     if filename == query {
@@ -1659,31 +1619,16 @@ mod tests {
         // Word start bonus - "main" should match better at start
         let start_score = fuzzy_match("main", "main.rs").unwrap();
         let middle_score = fuzzy_match("main", "my_main.rs").unwrap();
-
-        println!(
-            "DEBUG: start_score={:?}, middle_score={:?}",
-            start_score, middle_score
-        );
         assert!(start_score >= middle_score); // Should be better or equal
 
         // CamelCase bonus - "mf" should match MyFunction better than myfunction
         let camel_score = fuzzy_match("mf", "MyFunction").unwrap();
         let regular_score = fuzzy_match("mf", "myfunction").unwrap();
-
-        println!(
-            "DEBUG: camel_score={:?}, regular_score={:?}",
-            camel_score, regular_score
-        );
         assert!(camel_score >= regular_score); // Should be better or equal
 
         // Snake case bonus - "my" should match my_function better than myfunction
         let snake_score = fuzzy_match("my", "my_function.rs").unwrap();
         let no_boundary_score = fuzzy_match("my", "myfunction.rs").unwrap();
-
-        println!(
-            "DEBUG: snake_score={:?}, no_boundary_score={:?}",
-            snake_score, no_boundary_score
-        );
         assert!(snake_score >= no_boundary_score); // Should be better or equal
 
         // Test underscore boundary specifically
